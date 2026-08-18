@@ -1,0 +1,30 @@
+services:
+  grafana:
+    image: grafana/grafana:11.3.1
+    restart: unless-stopped
+    networks: [monitoring-lab]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${MONITORING_GF_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${MONITORING_GF_ADMIN_PASSWORD:-playground}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3001:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  grafana-data:
+
+networks:
+  monitoring-lab:
+    name: ${MONITORING_LAB_NETWORK:-monitoring-lab}
+    external: true
+

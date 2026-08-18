@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="
+        http://www.springframework.org/schema/beans
+        http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+  <bean class="org.apache.ignite.configuration.IgniteConfiguration">
+    <property name="consistentId" value="#{systemProperties['IGNITE_NODE_NAME']}"/>
+    <property name="authenticationEnabled" value="true"/>
+
+    <property name="dataStorageConfiguration">
+      <bean class="org.apache.ignite.configuration.DataStorageConfiguration">
+        <property name="defaultDataRegionConfiguration">
+          <bean class="org.apache.ignite.configuration.DataRegionConfiguration">
+            <property name="name" value="Default_Region"/>
+            <property name="persistenceEnabled" value="true"/>
+            <property name="maxSize" value="268435456"/>
+          </bean>
+        </property>
+      </bean>
+    </property>
+
+    <property name="discoverySpi">
+      <bean class="org.apache.ignite.spi.discovery.tcp.TcpDiscoverySpi">
+        <property name="ipFinder">
+          <bean class="org.apache.ignite.spi.discovery.tcp.ipfinder.vm.TcpDiscoveryVmIpFinder">
+            <property name="addresses">
+              <list>
+                <value>ignite2-node1:47500</value>
+                <value>ignite2-node2:47500</value>
+                <value>ignite2-node3:47500</value>
+              </list>
+            </property>
+          </bean>
+        </property>
+      </bean>
+    </property>
+
+    <property name="connectorConfiguration">
+      <bean class="org.apache.ignite.configuration.ConnectorConfiguration">
+        <property name="host" value="0.0.0.0"/>
+      </bean>
+    </property>
+
+    <property name="clientConnectorConfiguration">
+      <bean class="org.apache.ignite.configuration.ClientConnectorConfiguration">
+        <property name="host" value="0.0.0.0"/>
+        <property name="port" value="10800"/>
+      </bean>
+    </property>
+  </bean>
+</beans>

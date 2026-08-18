@@ -1,0 +1,10 @@
+.env
+**/secrets/**
+!**/secrets/**/*.example
+data/
+certs/
+**/target/
+**/__pycache__/
+*.pyc
+.DS_Store
+ops/grafana/data/

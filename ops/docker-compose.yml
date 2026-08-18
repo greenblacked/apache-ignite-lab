@@ -1,0 +1,97 @@
+name: ops
+
+services:
+  ignite-exporter:
+    build:
+      context: ./exporter
+    restart: unless-stopped
+    networks: [ignite-lab]
+    environment:
+      EXPORTER_TIMEOUT_SECONDS: ${EXPORTER_TIMEOUT_SECONDS:-2}
+      IGNITE2_ENDPOINTS: >-
+        http://ignite2-node1:8080,http://ignite2-node2:8080,http://ignite2-node3:8080
+      IGNITE2_USER: ${IGNITE_LAB_USER:-ignite}
+      IGNITE2_PASSWORD: ${IGNITE2_PASSWORD:-ignite}
+      IGNITE3_ENDPOINTS: >-
+        http://ignite3-node1:10300,http://ignite3-node2:10300,http://ignite3-node3:10300
+      IGNITE3_USER: ${IGNITE_LAB_USER:-ignite}
+      IGNITE3_PASSWORD: ${IGNITE_LAB_PASSWORD:-ignite-lab-pass}
+    expose:
+      - "8000"
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2).read()
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    networks: [ignite-lab]
+    labels:
+      - dev.orbstack.http-port=9090
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.external-url=http://127.0.0.1:9090/
+    depends_on:
+      ignite-exporter:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    restart: unless-stopped
+    networks: [ignite-lab]
+    labels:
+      - dev.orbstack.http-port=3000
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  ignite-lab:
+    name: ${IGNITE_LAB_NETWORK:-ignite-lab}
+    external: true

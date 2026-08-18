@@ -1,0 +1,83 @@
+name: ignite2
+
+x-ignite2: &ignite2
+  image: ${IGNITE2_IMAGE:-apacheignite/ignite:2.18.0-arm64}
+  restart: unless-stopped
+  networks: [ignite-lab]
+  volumes:
+    - ./config/ignite-config.xml:/config/ignite-config.xml:ro
+  mem_limit: 2g
+  healthcheck:
+    test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+    interval: 10s
+    timeout: 5s
+    retries: 30
+    start_period: 60s
+
+services:
+  ignite2-node1:
+    <<: *ignite2
+    hostname: ignite2-node1
+    environment:
+      CONFIG_URI: file:///config/ignite-config.xml
+      IGNITE_WORK_DIR: /storage
+      OPTION_LIBS: ignite-rest-http,ignite-json,ignite-indexing
+      JVM_OPTS: >-
+        -Xms${IGNITE_HEAP:-1g}
+        -Xmx${IGNITE_HEAP:-1g}
+        -Djava.net.preferIPv4Stack=true
+        -DIGNITE_NODE_NAME=ignite2-node1
+    volumes:
+      - ./config/ignite-config.xml:/config/ignite-config.xml:ro
+      - ignite2-node1-data:/storage
+    ports:
+      - "127.0.0.1:10800:10800"
+      - "127.0.0.1:8080:8080"
+
+  ignite2-node2:
+    <<: *ignite2
+    hostname: ignite2-node2
+    environment:
+      CONFIG_URI: file:///config/ignite-config.xml
+      IGNITE_WORK_DIR: /storage
+      OPTION_LIBS: ignite-rest-http,ignite-json,ignite-indexing
+      JVM_OPTS: >-
+        -Xms${IGNITE_HEAP:-1g}
+        -Xmx${IGNITE_HEAP:-1g}
+        -Djava.net.preferIPv4Stack=true
+        -DIGNITE_NODE_NAME=ignite2-node2
+    volumes:
+      - ./config/ignite-config.xml:/config/ignite-config.xml:ro
+      - ignite2-node2-data:/storage
+    ports:
+      - "127.0.0.1:10801:10800"
+      - "127.0.0.1:8081:8080"
+
+  ignite2-node3:
+    <<: *ignite2
+    hostname: ignite2-node3
+    environment:
+      CONFIG_URI: file:///config/ignite-config.xml
+      IGNITE_WORK_DIR: /storage
+      OPTION_LIBS: ignite-rest-http,ignite-json,ignite-indexing
+      JVM_OPTS: >-
+        -Xms${IGNITE_HEAP:-1g}
+        -Xmx${IGNITE_HEAP:-1g}
+        -Djava.net.preferIPv4Stack=true
+        -DIGNITE_NODE_NAME=ignite2-node3
+    volumes:
+      - ./config/ignite-config.xml:/config/ignite-config.xml:ro
+      - ignite2-node3-data:/storage
+    ports:
+      - "127.0.0.1:10802:10800"
+      - "127.0.0.1:8082:8080"
+
+volumes:
+  ignite2-node1-data:
+  ignite2-node2-data:
+  ignite2-node3-data:
+
+networks:
+  ignite-lab:
+    name: ${IGNITE_LAB_NETWORK:-ignite-lab}
+    external: true

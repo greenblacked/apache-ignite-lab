@@ -1,0 +1,89 @@
+name: Validate lab
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  static-and-examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Install validation tools
+        run: sudo apt-get update && sudo apt-get install --yes shellcheck
+
+      - name: Validate Compose models
+        run: |
+          docker compose --env-file .env.example -f ignite2/docker-compose.yml config --quiet
+          docker compose --env-file .env.example -f ignite3/docker-compose.yml config --quiet
+          docker compose --env-file .env.example -f ops/docker-compose.yml config --quiet
+          docker compose -f monitoring/prometheus/docker-compose.yml config --quiet
+          docker compose -f monitoring/grafana/docker-compose.yml config --quiet
+          docker compose -f monitoring/dynatrace/docker-compose.yml config --quiet
+          docker compose -f monitoring/docker-compose.yml config --quiet
+          DT_ENDPOINT=https://example.live.dynatrace.com/api/v2/otlp \
+            DT_API_TOKEN=ci-placeholder \
+            docker compose \
+              -f monitoring/dynatrace/docker-compose.yml \
+              -f monitoring/dynatrace/docker-compose.dynatrace.yml \
+              config --quiet
+
+      - name: Build exporter image
+        run: docker build -t ignite-lab-exporter:ci ops/exporter
+
+      - name: Validate Prometheus config
+        run: |
+          docker run --rm --entrypoint promtool \
+            -v "$PWD/ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+            prom/prometheus:v2.55.1 \
+            check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint promtool \
+            -v "$PWD/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+            prom/prometheus:v2.55.1 \
+            check config /etc/prometheus/prometheus.yml
+
+      - name: Validate OpenTelemetry Collector config
+        run: |
+          docker run --rm \
+            -v "$PWD/monitoring/dynatrace:/etc/otelcol-contrib:ro" \
+            otel/opentelemetry-collector-contrib:0.158.0 \
+            validate --config=file:/etc/otelcol-contrib/otel-collector-config.yml
+          docker run --rm \
+            -e DT_ENDPOINT=https://example.live.dynatrace.com/api/v2/otlp \
+            -e DT_API_TOKEN=ci-placeholder \
+            -v "$PWD/monitoring/dynatrace:/etc/otelcol-contrib:ro" \
+            otel/opentelemetry-collector-contrib:0.158.0 \
+            validate \
+              --config=file:/etc/otelcol-contrib/otel-collector-config.yml \
+              --config=file:/etc/otelcol-contrib/otel-collector-config.dynatrace.yml
+
+      - name: Validate shell and configuration syntax
+        run: |
+          shellcheck scripts/*.sh
+          python -m json.tool ops/grafana/dashboards/ignite-lab.json >/dev/null
+          python -m json.tool monitoring/grafana/dashboards/monitoring-demo.json >/dev/null
+          python -m compileall -q examples ops
+
+      - name: Run Python unit tests
+        run: |
+          python -m unittest discover -s examples/tests -p 'test_*.py' -v
+          python -m unittest discover -s ops/exporter -p 'test_*.py' -v
+
+      - name: Build Java examples
+        run: |
+          mvn -q -f examples/ignite2/java/pom.xml -DskipTests package
+          mvn -q -f examples/ignite3/java/pom.xml -DskipTests package

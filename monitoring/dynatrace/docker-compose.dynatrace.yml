@@ -1,0 +1,18 @@
+services:
+  otel-collector:
+    command:
+      - --config=file:/etc/otelcol-contrib/config.yml
+      - --config=file:/etc/otelcol-contrib/config.dynatrace.yml
+    environment:
+      DT_ENDPOINT: ${DT_ENDPOINT:?Set DT_ENDPOINT in monitoring/dynatrace/.env}
+      DT_API_TOKEN: ${DT_API_TOKEN:?Set DT_API_TOKEN in monitoring/dynatrace/.env}
+    volumes:
+      - ./otel-collector-config.dynatrace.yml:/etc/otelcol-contrib/config.dynatrace.yml:ro
+    healthcheck:
+      test:
+        - CMD
+        - /otelcol-contrib
+        - validate
+        - --config=file:/etc/otelcol-contrib/config.yml
+        - --config=file:/etc/otelcol-contrib/config.dynatrace.yml
+

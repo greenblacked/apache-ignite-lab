@@ -1,0 +1,150 @@
+# Apache Ignite Practice Lab
+
+Local, production-shaped Docker Compose lab for **Ignite 2.18** and **Ignite 3.1** on Apple Silicon: 3-node clusters, persistence, auth, Prometheus/Grafana, helper scripts, and starter clients.
+
+## Prerequisites
+
+- Docker Desktop or OrbStack with Docker Compose v2+
+- ~8+ GB free RAM if running both stacks + ops
+- Bash and `curl` for helper scripts; Python 3 for the full smoke test
+- Optional: CPython 3.10–3.13, JDK 17+, Maven 3.8.6+ (for examples)
+
+## Quick start
+
+```bash
+cp .env.example .env
+chmod 600 .env
+./scripts/network-up.sh
+
+# Ignite 2
+./scripts/ignite2-up.sh
+
+# Ignite 3
+./scripts/ignite3-up.sh
+./scripts/ignite3-init.sh   # initialize/enable auth when needed; safe to rerun
+
+# Observability
+./scripts/ops-up.sh
+```
+
+Run either versioned stack independently, or execute both `*-up.sh` scripts to run them together.
+
+After both Ignite stacks and observability are running, execute the read-only acceptance checks:
+
+```bash
+./scripts/smoke-test.sh
+```
+
+The smoke test verifies all six nodes, both cluster states, Ignite 2 SQL, exported Prometheus metrics, and the Grafana datasource/dashboard. It exits nonzero on the first failed check.
+
+Stop (keep data): `./scripts/down-all.sh`  
+Wipe volumes: `./scripts/down-all.sh --wipe`
+
+## Ports
+
+| Stack | Service | Host ports |
+|-------|---------|------------|
+| Ignite 2 | Thin client | 10800–10802 |
+| Ignite 2 | REST | 8080–8082 |
+| Ignite 3 | REST / management | 10300–10302 |
+| Ignite 3 | Client | 10810–10812 |
+| Ops | Prometheus | 9090 |
+| Ops | Grafana | 3000 |
+| Monitoring playground | Prometheus | 9091 |
+| Monitoring playground | Grafana | 3001 |
+| Monitoring playground | OTLP gRPC / HTTP | 4317 / 4318 |
+
+All published ports bind to `127.0.0.1`; they are not exposed on every host interface.
+
+### Access URLs
+
+| Service | Use this (reliable) | Optional OrbStack |
+|---------|---------------------|-------------------|
+| Grafana | http://127.0.0.1:3000/ | https://grafana.ops.orb.local/ |
+| Prometheus | http://127.0.0.1:9090/ | https://prometheus.ops.orb.local/ |
+
+Prefer **localhost ports**. OrbStack `*.orb.local` domains often fail in Chrome/Edge when:
+- **Local Network** permission is off: System Settings → Privacy & Security → Local Network → enable your browser (and its “Helper (GPU)” entry)
+- **Secure DNS / DoH** is on: Chrome → Settings → Privacy and security → Security → Use secure DNS → Off
+- Corporate VPN / MagicDNS overrides `.local` resolution
+
+Also enable OrbStack → Settings → Network → **Allow access to container domains & IPs**.
+
+DNS names on Docker network `ignite-lab`: `ignite2-node1..3`, `ignite3-node1..3`.
+
+## Credentials
+
+| Stack | Default |
+|-------|---------|
+| Ignite 2 | `ignite` / `IGNITE2_PASSWORD` from `.env` (fresh cluster: `ignite`) |
+| Ignite 3 | `ignite` / `IGNITE_LAB_PASSWORD` from `.env` (`ignite-lab-pass`) |
+| Grafana | `GF_SECURITY_ADMIN_*` from `.env` |
+
+Keep `IGNITE_LAB_USER=ignite`; the bootstrap helpers support the built-in user only. Change the Ignite 3 and Grafana defaults before their first start. Updating a password in `.env` does not rotate an already-persisted cluster credential or Grafana admin account.
+
+Ignite 3 REST check:
+
+```bash
+set -a; source .env; set +a
+curl -u "${IGNITE_LAB_USER}:${IGNITE_LAB_PASSWORD}" \
+  http://127.0.0.1:10300/management/v1/cluster/state
+```
+
+Ignite 3 CLI:
+
+```bash
+./scripts/ignite3-cli.sh
+# then: connect http://ignite3-node1:10300 -u ignite -p <IGNITE_LAB_PASSWORD from .env>
+```
+
+## Persistence
+
+- Named Docker volumes per node survive `restart` and `down` (without `-v`)
+- Ignite 2 requires cluster activation after first start (`ignite2-up.sh` does this)
+- Ignite 3 requires `cluster init` after fresh or wiped volumes; `ignite3-init.sh` is idempotent
+
+## Observability
+
+`ops-up.sh` rebuilds and recreates the observability containers while preserving their named volumes. The internal exporter converts authenticated Ignite REST health and topology responses into Prometheus metrics; it is not published on a host port.
+
+Grafana provisions the **Ignite Lab Overview** dashboard with node health, cluster membership, versions, collection duration, and collection errors. If a panel is empty after startup, run `./scripts/smoke-test.sh`; it checks the exporter, Prometheus target, Grafana datasource, and provisioned dashboard without changing cluster data.
+
+## Independent monitoring playground
+
+The separate [monitoring playground](monitoring/README.md) runs Prometheus, Grafana, and an OpenTelemetry Collector without Ignite. It uses the `monitoring-lab` network and ports 9091/3001, so it can run beside the Ignite-coupled `ops/` stack on 9090/3000.
+
+```bash
+./scripts/monitoring-up.sh
+./scripts/monitoring-down.sh
+```
+
+## Examples
+
+See [examples/README.md](examples/README.md).
+
+## Practice checklist
+
+1. Start Ignite 2; run the read-only SQL check: `./scripts/ignite2-sql.sh`
+2. Run the Ignite 2 Python example. It cleans up its values; use a separate practice key when testing persistence across `docker compose restart`
+3. Start Ignite 3; init; enable auth; `cluster status`
+4. Run the Ignite 3 Python or Java example to create a RocksDB zone/table and verify write/read behavior
+5. Start ops; open Prometheus targets and Grafana dashboard **Ignite Lab Overview**
+6. Kill one node container; observe cluster behavior; bring it back
+
+## Production parallels vs lab simplifications
+
+| Production-like | Simplified for laptop |
+|-----------------|------------------------|
+| Multi-node discovery, persistence, auth, resource limits, healthchecks, restart policy | Single-host Docker network, self-contained lab passwords |
+| Prometheus-format lab health/topology metrics | A lightweight exporter polls authenticated Ignite REST APIs; it is not the full Ignite metrics catalog |
+| Separate stacks / unique DNS | No K8s, no mutual TLS PKI, no WAN/replication |
+
+Optional TLS helper stub: `scripts/gen-certs.sh` (self-signed only; wire into clients when you are ready).
+
+## Troubleshooting
+
+- **Apple Silicon:** use `apacheignite/ignite:2.18.0-arm64` (set in `.env`)
+- **Ignite 2 REST missing `ignite-json`:** `OPTION_LIBS` must include `ignite-rest-http,ignite-json`
+- **Ignite 3 stuck STARTING:** run `./scripts/ignite3-init.sh`
+- **Port conflicts:** stop other local Ignite/Grafana/Prometheus or change published ports in compose files
+- **Both stacks together:** always use `ignite2-node*` / `ignite3-node*` names (already configured)

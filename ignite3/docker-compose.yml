@@ -1,0 +1,65 @@
+name: ignite3
+
+x-ignite3: &ignite3
+  image: ${IGNITE3_IMAGE:-apacheignite/ignite:3.1.0}
+  restart: unless-stopped
+  networks: [ignite-lab]
+  environment:
+    JVM_MAX_MEM: ${IGNITE_HEAP:-1g}
+    JVM_MIN_MEM: ${IGNITE_HEAP:-1g}
+  configs:
+    - source: node_config
+      target: /opt/ignite/etc/ignite-config.conf
+      mode: 0644
+  mem_limit: 2g
+  healthcheck:
+    test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/10300'"]
+    interval: 10s
+    timeout: 5s
+    retries: 30
+    start_period: 60s
+
+services:
+  ignite3-node1:
+    <<: *ignite3
+    hostname: ignite3-node1
+    command: ["--node-name", "ignite3-node1"]
+    volumes:
+      - ignite3-node1-data:/opt/ignite/work
+    ports:
+      - "127.0.0.1:10300:10300"
+      - "127.0.0.1:10810:10800"
+
+  ignite3-node2:
+    <<: *ignite3
+    hostname: ignite3-node2
+    command: ["--node-name", "ignite3-node2"]
+    volumes:
+      - ignite3-node2-data:/opt/ignite/work
+    ports:
+      - "127.0.0.1:10301:10300"
+      - "127.0.0.1:10811:10800"
+
+  ignite3-node3:
+    <<: *ignite3
+    hostname: ignite3-node3
+    command: ["--node-name", "ignite3-node3"]
+    volumes:
+      - ignite3-node3-data:/opt/ignite/work
+    ports:
+      - "127.0.0.1:10302:10300"
+      - "127.0.0.1:10812:10800"
+
+volumes:
+  ignite3-node1-data:
+  ignite3-node2-data:
+  ignite3-node3-data:
+
+configs:
+  node_config:
+    file: ./config/node-config.conf
+
+networks:
+  ignite-lab:
+    name: ${IGNITE_LAB_NETWORK:-ignite-lab}
+    external: true

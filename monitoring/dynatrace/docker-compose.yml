@@ -1,0 +1,28 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.158.0
+    restart: unless-stopped
+    command:
+      - --config=file:/etc/otelcol-contrib/config.yml
+    networks: [monitoring-lab]
+    volumes:
+      - ./otel-collector-config.yml:/etc/otelcol-contrib/config.yml:ro
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    healthcheck:
+      test:
+        - CMD
+        - /otelcol-contrib
+        - validate
+        - --config=file:/etc/otelcol-contrib/config.yml
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+networks:
+  monitoring-lab:
+    name: ${MONITORING_LAB_NETWORK:-monitoring-lab}
+    external: true
+
