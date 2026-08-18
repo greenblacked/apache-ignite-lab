@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ignite3
+  labels:
+    app.kubernetes.io/name: ignite-lab
+    app.kubernetes.io/instance: ignite3
+    app.kubernetes.io/version: "3.1.0"
+spec:
+  serviceName: ignite3-headless
+  replicas: 3
+  # Nodes discover each other at startup, so they must all start together
+  # rather than one at a time.
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ignite-lab
+      app.kubernetes.io/instance: ignite3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ignite-lab
+        app.kubernetes.io/instance: ignite3
+        app.kubernetes.io/version: "3.1.0"
+      annotations:
+        # Roll the pods when the node config changes.
+        checksum/config: 90382d1110c485c224c018c226462f911fff45c266b68fdb255952fb41f80b74
+    spec:
+      # Ignite flushes on shutdown; give it room before SIGKILL.
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        # Ignite 3 merges defaults back into its node config at startup, so the
+        # file must be writable. A ConfigMap mount never is: copy it out first.
+        - name: copy-config
+          image: "apacheignite/ignite:3.1.0"
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - cp /etc/ignite-lab/ignite-config.conf /opt/ignite/conf/ignite-config.conf
+          volumeMounts:
+            - name: config
+              mountPath: /etc/ignite-lab
+              readOnly: true
+            - name: conf
+              mountPath: /opt/ignite/conf
+      containers:
+        - name: ignite
+          image: "apacheignite/ignite:3.1.0"
+          imagePullPolicy: IfNotPresent
+          # The entrypoint takes --node-name; $(POD_NAME) is expanded by
+          # kubelet, so each node registers under its stable pod name.
+          args:
+            - --node-name
+            - $(POD_NAME)
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: IGNITE_CONFIG_PATH
+              value: /opt/ignite/conf/ignite-config.conf
+            - name: JVM_MIN_MEM
+              value: "1g"
+            - name: JVM_MAX_MEM
+              value: "1g"
+          ports:
+            - name: cluster
+              containerPort: 3344
+            - name: rest
+              containerPort: 10300
+            - name: client
+              containerPort: 10800
+          readinessProbe:
+            tcpSocket:
+              port: rest
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            tcpSocket:
+              port: cluster
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            limits:
+              memory: 2Gi
+            requests:
+              cpu: 500m
+              memory: 2Gi
+          volumeMounts:
+            - name: conf
+              mountPath: /opt/ignite/conf
+            - name: work
+              mountPath: /opt/ignite/work
+      volumes:
+        - name: config
+          configMap:
+            name: ignite3-config
+        - name: conf
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: work
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 8Gi

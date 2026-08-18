@@ -1,0 +1,40 @@
+{{- if .Values.clusterInit.enabled }}
+{{- $full := include "ignite-lab.fullname" . -}}
+{{- $headless := include "ignite-lab.headless" . -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $full }}-cluster-init
+  labels:
+    {{- include "ignite-lab.labels" . | nindent 4 }}
+  annotations:
+    # Runs after the StatefulSet exists. Ignite 3 reports STARTING until the
+    # cluster is initialized, so the job retries until a node answers.
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: {{ .Values.clusterInit.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "ignite-lab.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: cluster-init
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - cli
+            - cluster
+            - init
+            - --url
+            - http://{{ $full }}-0.{{ $headless }}:{{ .Values.ports.rest }}
+            - --name={{ .Values.clusterInit.clusterName }}
+            - --metastorage-group={{ include "ignite-lab.nodeNames" . }}
+{{- end }}

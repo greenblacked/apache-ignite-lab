@@ -142,8 +142,21 @@ See [examples/README.md](examples/README.md).
 | Python 3.10–3.13 | Mocked example tests and the exporter unit tests; no cluster or Ignite client packages needed |
 | Java examples | `mvn verify` for both modules on Temurin 17 (`exec:java` is skipped because it needs a live cluster) |
 | Lab smoke test | Boots Ignite 2, Ignite 3, and `ops/` on the runner, then runs `./scripts/smoke-test.sh` and tears the stacks down |
+| Helm and manifests | `helm lint` and `helm template` for every values file, `kubeconform` schema validation of the rendered output and `k8s/`, and a drift check that the raw manifests still match the chart |
 
 The smoke-test job overrides `IGNITE2_IMAGE`/`IGNITE3_IMAGE` because GitHub runners are x86_64 while `.env` pins arm64 images for Apple Silicon. It supplies the lab defaults through job `env`, since `.env` is gitignored and absent in CI. Python 3.10 is the floor: `ops/exporter/exporter.py` evaluates a PEP 604 union at import time.
+
+## Kubernetes
+
+[k8s/README.md](k8s/README.md) covers running Ignite 3 on Kubernetes, either
+through the [helm/ignite-lab](helm/ignite-lab) chart or the plain manifests in
+[k8s/ignite3](k8s/ignite3). The chart ships `values-dev.yaml` (one node, no
+persistence) and `values-prod.yaml` (three nodes, PVCs, anti-affinity, PDB).
+
+```bash
+helm install ignite3 helm/ignite-lab --namespace ignite --create-namespace
+kubectl -n ignite port-forward svc/ignite3 10300:10300 10800:10800
+```
 
 ## Production parallels vs lab simplifications
 

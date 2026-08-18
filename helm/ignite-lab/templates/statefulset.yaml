@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "ignite-lab.fullname" . }}
+  labels:
+    {{- include "ignite-lab.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "ignite-lab.headless" . }}
+  replicas: {{ .Values.replicaCount }}
+  # Nodes discover each other at startup, so they must all start together
+  # rather than one at a time.
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- include "ignite-lab.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ignite-lab.labels" . | nindent 8 }}
+      annotations:
+        # Roll the pods when the node config changes.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Ignite flushes on shutdown; give it room before SIGKILL.
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        # Ignite 3 merges defaults back into its node config at startup, so the
+        # file must be writable. A ConfigMap mount never is: copy it out first.
+        - name: copy-config
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - cp /etc/ignite-lab/ignite-config.conf /opt/ignite/conf/ignite-config.conf
+          volumeMounts:
+            - name: config
+              mountPath: /etc/ignite-lab
+              readOnly: true
+            - name: conf
+              mountPath: /opt/ignite/conf
+      containers:
+        - name: ignite
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          # The entrypoint takes --node-name; $(POD_NAME) is expanded by
+          # kubelet, so each node registers under its stable pod name.
+          args:
+            - --node-name
+            - $(POD_NAME)
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: IGNITE_CONFIG_PATH
+              value: /opt/ignite/conf/ignite-config.conf
+            - name: JVM_MIN_MEM
+              value: {{ .Values.jvm.minMem | quote }}
+            - name: JVM_MAX_MEM
+              value: {{ .Values.jvm.maxMem | quote }}
+          ports:
+            - name: cluster
+              containerPort: {{ .Values.ports.cluster }}
+            - name: rest
+              containerPort: {{ .Values.ports.rest }}
+            - name: client
+              containerPort: {{ .Values.ports.client }}
+          readinessProbe:
+            tcpSocket:
+              port: rest
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          livenessProbe:
+            tcpSocket:
+              port: cluster
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: conf
+              mountPath: /opt/ignite/conf
+            - name: work
+              mountPath: /opt/ignite/work
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "ignite-lab.fullname" . }}-config
+        - name: conf
+          emptyDir: {}
+        {{- if not .Values.persistence.enabled }}
+        - name: work
+          emptyDir: {}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: work
+      spec:
+        accessModes:
+          {{- toYaml .Values.persistence.accessModes | nindent 10 }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+        {{- if .Values.persistence.storageClass }}
+        storageClassName: {{ .Values.persistence.storageClass }}
+        {{- end }}
+  {{- end }}

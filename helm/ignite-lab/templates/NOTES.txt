@@ -1,0 +1,25 @@
+{{ include "ignite-lab.fullname" . }} is installing {{ .Values.replicaCount }} Ignite {{ .Chart.AppVersion }} node(s).
+
+Watch them start:
+  kubectl --namespace {{ .Release.Namespace }} rollout status statefulset/{{ include "ignite-lab.fullname" . }}
+
+{{ if .Values.clusterInit.enabled -}}
+The cluster is initialized by a post-install job named
+{{ include "ignite-lab.fullname" . }}-cluster-init. Check it with:
+  kubectl --namespace {{ .Release.Namespace }} logs job/{{ include "ignite-lab.fullname" . }}-cluster-init
+{{- else -}}
+clusterInit is disabled, so the nodes stay in STARTING. Initialize manually:
+  kubectl --namespace {{ .Release.Namespace }} exec -it {{ include "ignite-lab.fullname" . }}-0 -- \
+    /opt/ignite3cli/bin/ignite3 cluster init \
+      --url http://localhost:{{ .Values.ports.rest }} \
+      --name={{ .Values.clusterInit.clusterName }} \
+      --metastorage-group={{ include "ignite-lab.nodeNames" . }}
+{{- end }}
+
+Reach the cluster from your machine:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "ignite-lab.fullname" . }} {{ .Values.ports.rest }}:{{ .Values.ports.rest }} {{ .Values.ports.client }}:{{ .Values.ports.client }}
+  curl http://127.0.0.1:{{ .Values.ports.rest }}/management/v1/cluster/state
+
+{{ if not .Values.persistence.enabled -}}
+WARNING: persistence is disabled. All data is lost when a pod restarts.
+{{- end }}

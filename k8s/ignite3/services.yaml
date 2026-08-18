@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ignite3
+  labels:
+    app.kubernetes.io/name: ignite-lab
+    app.kubernetes.io/instance: ignite3
+    app.kubernetes.io/version: "3.1.0"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ignite-lab
+    app.kubernetes.io/instance: ignite3
+  ports:
+    - name: rest
+      port: 10300
+      targetPort: rest
+    - name: client
+      port: 10800
+      targetPort: client
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ignite3-headless
+  labels:
+    app.kubernetes.io/name: ignite-lab
+    app.kubernetes.io/instance: ignite3
+    app.kubernetes.io/version: "3.1.0"
+spec:
+  clusterIP: None
+  # Peers must resolve each other before they are Ready, otherwise the cluster
+  # can never form.
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: ignite-lab
+    app.kubernetes.io/instance: ignite3
+  ports:
+    - name: cluster
+      port: 3344
+      targetPort: cluster
+    - name: rest
+      port: 10300
+      targetPort: rest
+    - name: client
+      port: 10800
+      targetPort: client

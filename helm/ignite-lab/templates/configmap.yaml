@@ -1,0 +1,30 @@
+{{- $headless := include "ignite-lab.headless" . -}}
+{{- $full := include "ignite-lab.fullname" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $full }}-config
+  labels:
+    {{- include "ignite-lab.labels" . | nindent 4 }}
+data:
+  # HOCON node config. An init container copies this to a writable path because
+  # Ignite merges defaults back into the file at startup. Peers are addressed
+  # through the headless Service, which gives every pod a stable DNS name.
+  ignite-config.conf: |
+    ignite {
+      network {
+        port: {{ .Values.ports.cluster }}
+        nodeFinder.netClusterNodes = [
+          {{- range $i := until (int .Values.replicaCount) }}
+          {{ if $i }}, {{ end }}"{{ $full }}-{{ $i }}.{{ $headless }}:{{ $.Values.ports.cluster }}"
+          {{- end }}
+        ]
+      }
+      storage {
+        profiles = [
+          {{- range $i, $p := .Values.storage.profiles }}
+          {{ if $i }}, {{ end }}{ name = {{ $p.name }}, engine = {{ $p.engine }} }
+          {{- end }}
+        ]
+      }
+    }

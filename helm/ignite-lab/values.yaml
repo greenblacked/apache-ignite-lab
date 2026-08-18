@@ -1,0 +1,79 @@
+# Number of Ignite nodes. Every node is listed in the node finder and in the
+# metastorage group, so changing this after "cluster init" needs care.
+replicaCount: 3
+
+image:
+  repository: apacheignite/ignite
+  tag: "3.1.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# JVM heap per node. Keep resources.limits.memory comfortably above this:
+# Ignite also allocates off-heap and native RocksDB memory.
+jvm:
+  minMem: 1g
+  maxMem: 1g
+
+# Storage profiles written into the node config. The lab's examples create
+# tables with STORAGE PROFILES['rocksDbProfile'].
+storage:
+  profiles:
+    - name: rocksDbProfile
+      engine: rocksdb
+
+ports:
+  cluster: 3344
+  rest: 10300
+  client: 10800
+
+persistence:
+  enabled: true
+  size: 8Gi
+  # Leave empty to use the cluster default StorageClass.
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+
+service:
+  type: ClusterIP
+  annotations: {}
+
+# Runs "cluster init" once as a post-install hook. Ignite 3 stays in STARTING
+# until the cluster is initialized, so this is on by default.
+clusterInit:
+  enabled: true
+  clusterName: ignite3-lab
+  backoffLimit: 6
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 2Gi
+  limits:
+    memory: 2Gi
+
+# Probes target the REST port, which only listens once the node is serving.
+probes:
+  readiness:
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    failureThreshold: 30
+  liveness:
+    initialDelaySeconds: 120
+    periodSeconds: 20
+    failureThreshold: 6
+
+podSecurityContext: {}
+securityContext: {}
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 2

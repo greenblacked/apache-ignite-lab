@@ -1,0 +1,17 @@
+# Smallest useful footprint: one node, no PVC, low memory.
+# helm install ignite ./helm/ignite-lab -f helm/ignite-lab/values-dev.yaml
+replicaCount: 1
+
+jvm:
+  minMem: 512m
+  maxMem: 512m
+
+persistence:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 1Gi
+  limits:
+    memory: 1Gi

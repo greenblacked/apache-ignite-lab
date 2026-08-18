@@ -1,0 +1,35 @@
+# Production-shaped: three nodes on separate machines, real disks, PDB.
+# helm install ignite ./helm/ignite-lab -f helm/ignite-lab/values-prod.yaml
+replicaCount: 3
+
+jvm:
+  minMem: 4g
+  maxMem: 4g
+
+persistence:
+  enabled: true
+  size: 100Gi
+  storageClass: fast-ssd
+
+resources:
+  requests:
+    cpu: "2"
+    memory: 8Gi
+  limits:
+    memory: 8Gi
+
+# Keep one node per host so a node failure cannot take the quorum with it.
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+                - ignite-lab
+        topologyKey: kubernetes.io/hostname
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2

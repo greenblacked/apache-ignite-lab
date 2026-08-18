@@ -87,6 +87,71 @@ jobs:
         working-directory: examples/ignite3/java
         run: mvn -B -ntp verify
 
+  kubernetes:
+    name: Helm and manifests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: Helm lint
+        run: |
+          for values in "" values-dev.yaml values-prod.yaml; do
+            if [ -z "$values" ]; then
+              echo "::group::lint (defaults)"
+              helm lint helm/ignite-lab
+            else
+              echo "::group::lint ($values)"
+              helm lint helm/ignite-lab -f "helm/ignite-lab/$values"
+            fi
+            echo "::endgroup::"
+          done
+
+      - name: Install kubeconform
+        run: |
+          curl -sSfL \
+            https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin kubeconform
+
+      # Schema-validates the rendered output; no cluster is contacted.
+      - name: Validate rendered chart
+        run: |
+          for values in "" values-dev.yaml values-prod.yaml; do
+            if [ -z "$values" ]; then
+              echo "::group::render (defaults)"
+              helm template ignite helm/ignite-lab | kubeconform -strict -summary
+            else
+              echo "::group::render ($values)"
+              helm template ignite helm/ignite-lab -f "helm/ignite-lab/$values" \
+                | kubeconform -strict -summary
+            fi
+            echo "::endgroup::"
+          done
+
+      # kubeconform validates against real Kubernetes schemas offline.
+      # "kubectl apply --dry-run=client" is NOT usable here: it still fetches
+      # the OpenAPI schema from an API server, and the runner has no cluster.
+      - name: Validate raw manifests
+        run: kubeconform -strict -summary k8s/ignite3/
+
+      # The manifests are a rendered snapshot of the chart; fail if they drift.
+      - name: Raw manifests match the chart
+        run: |
+          helm template ignite3 helm/ignite-lab \
+            --set fullnameOverride=ignite3 \
+            --set clusterInit.enabled=false \
+            | grep -v '^# Source:' \
+            | grep -v 'app.kubernetes.io/managed-by: Helm' \
+            | grep -v 'helm.sh/chart:' > /tmp/rendered.yaml
+          # Compare the meaningful content, not file layout.
+          grep -hv '^---$' k8s/ignite3/*.yaml | grep -v '^$' | sort > /tmp/committed.sorted
+          grep -v '^---$' /tmp/rendered.yaml | grep -v '^$' | sort > /tmp/rendered.sorted
+          diff -u /tmp/committed.sorted /tmp/rendered.sorted
+
   integration:
     name: Lab smoke test
     runs-on: ubuntu-latest
