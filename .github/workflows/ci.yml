@@ -100,15 +100,17 @@ jobs:
 
       - name: Helm lint
         run: |
-          for values in "" values-dev.yaml values-prod.yaml; do
-            if [ -z "$values" ]; then
-              echo "::group::lint (defaults)"
-              helm lint helm/ignite-lab
-            else
-              echo "::group::lint ($values)"
-              helm lint helm/ignite-lab -f "helm/ignite-lab/$values"
-            fi
-            echo "::endgroup::"
+          for chart in ignite-lab ignite2 ignite-observability; do
+            for values in "" values-dev.yaml values-prod.yaml; do
+              if [ -z "$values" ]; then
+                echo "::group::lint $chart (defaults)"
+                helm lint "helm/$chart"
+              else
+                echo "::group::lint $chart ($values)"
+                helm lint "helm/$chart" -f "helm/$chart/$values"
+              fi
+              echo "::endgroup::"
+            done
           done
 
       - name: Install kubeconform
@@ -118,19 +120,28 @@ jobs:
             | tar -xz -C /usr/local/bin kubeconform
 
       # Schema-validates the rendered output; no cluster is contacted.
-      - name: Validate rendered chart
+      - name: Validate rendered charts
         run: |
-          for values in "" values-dev.yaml values-prod.yaml; do
-            if [ -z "$values" ]; then
-              echo "::group::render (defaults)"
-              helm template ignite helm/ignite-lab | kubeconform -strict -summary
-            else
-              echo "::group::render ($values)"
-              helm template ignite helm/ignite-lab -f "helm/ignite-lab/$values" \
-                | kubeconform -strict -summary
-            fi
-            echo "::endgroup::"
+          for chart in ignite-lab ignite2 ignite-observability; do
+            for values in "" values-dev.yaml values-prod.yaml; do
+              if [ -z "$values" ]; then
+                echo "::group::render $chart (defaults)"
+                helm template t "helm/$chart" | kubeconform -strict -summary
+              else
+                echo "::group::render $chart ($values)"
+                helm template t "helm/$chart" -f "helm/$chart/$values" \
+                  | kubeconform -strict -summary
+              fi
+              echo "::endgroup::"
+            done
           done
+
+      # The chart cannot read files outside its own directory, so the dashboard
+      # is copied in. Fail if the copy falls behind the ops/ original.
+      - name: Grafana dashboard copy is current
+        run: |
+          diff -u ops/grafana/dashboards/ignite-lab.json \
+                  helm/ignite-observability/dashboards/ignite-lab.json
 
       # kubeconform validates against real Kubernetes schemas offline.
       # "kubectl apply --dry-run=client" is NOT usable here: it still fetches

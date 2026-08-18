@@ -1,0 +1,23 @@
+{{- if .Values.prometheus.enabled }}
+{{- $name := include "obs.prometheusName" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "obs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: {{ .Values.prometheus.scrapeIntervalSeconds }}s
+      scrape_timeout: 10s
+      evaluation_interval: {{ .Values.prometheus.scrapeIntervalSeconds }}s
+
+    scrape_configs:
+      - job_name: ignite-exporter
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+              - {{ include "obs.exporterName" . }}:{{ .Values.exporter.port }}
+{{- end }}

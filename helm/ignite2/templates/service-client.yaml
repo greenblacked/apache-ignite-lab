@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ignite2.fullname" . }}
+  labels:
+    {{- include "ignite2.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "ignite2.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: rest
+      port: {{ .Values.ports.rest }}
+      targetPort: rest
+    - name: client
+      port: {{ .Values.ports.client }}
+      targetPort: client

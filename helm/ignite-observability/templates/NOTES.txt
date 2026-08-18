@@ -1,0 +1,33 @@
+{{ include "obs.fullname" . }} installs the Ignite exporter{{ if .Values.prometheus.enabled }}, Prometheus{{ end }}{{ if .Values.grafana.enabled }}, and Grafana{{ end }}.
+
+{{ if .Values.grafana.enabled -}}
+Open Grafana:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "obs.grafanaName" . }} {{ .Values.grafana.port }}:{{ .Values.grafana.port }}
+  http://127.0.0.1:{{ .Values.grafana.port }}/  ({{ .Values.grafana.adminUser }})
+The Ignite Lab Overview dashboard is provisioned automatically.
+{{- end }}
+
+{{ if .Values.prometheus.enabled -}}
+Open Prometheus:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "obs.prometheusName" . }} {{ .Values.prometheus.port }}:{{ .Values.prometheus.port }}
+  Try the query: ignite_node_up
+{{- end }}
+
+Check that the exporter is reaching your clusters:
+  kubectl --namespace {{ .Release.Namespace }} logs deploy/{{ include "obs.exporterName" . }}
+
+The exporter polls:
+  Ignite 2: {{ .Values.ignite2.endpoints }}
+  Ignite 3: {{ .Values.ignite3.endpoints }}
+Override ignite2.endpoints / ignite3.endpoints if your releases use other names.
+
+{{ if eq .Values.exporter.image.repository "ignite-exporter" -}}
+NOTE: exporter.image.repository is still the default "ignite-exporter". No
+public image exists; build and push it first:
+  docker build -t <registry>/ignite-exporter:{{ .Values.exporter.image.tag }} ops/exporter
+  docker push  <registry>/ignite-exporter:{{ .Values.exporter.image.tag }}
+{{- end }}
+{{ if and .Values.grafana.enabled (not .Values.grafana.existingSecret) -}}
+WARNING: Grafana is using the password from values.yaml. Set
+grafana.existingSecret before anyone else can reach it.
+{{- end }}

@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "ignite2.fullname" . }}
+  labels:
+    {{- include "ignite2.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "ignite2.headless" . }}
+  replicas: {{ .Values.replicaCount }}
+  # Discovery is peer-to-peer at startup; starting one pod at a time only
+  # delays the first topology.
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      {{- include "ignite2.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ignite2.labels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "ignite2.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Persistence checkpoints on shutdown; do not cut it short.
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: ignite
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: CONFIG_URI
+              value: file:///config/ignite-config.xml
+            - name: IGNITE_WORK_DIR
+              value: /storage
+            - name: OPTION_LIBS
+              value: {{ .Values.optionLibs | quote }}
+            # kubelet expands $(POD_NAME), giving each node a stable consistentId.
+            - name: JVM_OPTS
+              value: >-
+                -Xms{{ .Values.jvm.heap }}
+                -Xmx{{ .Values.jvm.heap }}
+                -Djava.net.preferIPv4Stack=true
+                -DIGNITE_NODE_NAME=$(POD_NAME)
+                {{ .Values.jvm.extraOpts }}
+          ports:
+            - name: discovery
+              containerPort: {{ .Values.ports.discovery }}
+            - name: communication
+              containerPort: {{ .Values.ports.communication }}
+            - name: rest
+              containerPort: {{ .Values.ports.rest }}
+            - name: client
+              containerPort: {{ .Values.ports.client }}
+          readinessProbe:
+            tcpSocket:
+              port: rest
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          livenessProbe:
+            tcpSocket:
+              port: discovery
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: storage
+              mountPath: /storage
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "ignite2.fullname" . }}-config
+        {{- if not .Values.persistence.enabled }}
+        - name: storage
+          emptyDir: {}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: storage
+      spec:
+        accessModes:
+          {{- toYaml .Values.persistence.accessModes | nindent 10 }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+        {{- if .Values.persistence.storageClass }}
+        storageClassName: {{ .Values.persistence.storageClass }}
+        {{- end }}
+  {{- end }}

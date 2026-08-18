@@ -5,10 +5,15 @@ topology as [ignite3/docker-compose.yml](../ignite3/docker-compose.yml): three
 nodes, static discovery, and the `rocksDbProfile` storage profile the examples
 use.
 
-| Path | Use it when |
-|------|-------------|
-| [helm/ignite-lab](../helm/ignite-lab) | You want to change replica count, memory, storage class, or resources without editing YAML |
-| [k8s/ignite3](ignite3) | You want plain manifests to read or `kubectl apply` with no Helm involved |
+| Path | What it deploys |
+|------|-----------------|
+| [helm/ignite-lab](../helm/ignite-lab) | Ignite 3 StatefulSet, static discovery through a headless Service |
+| [helm/ignite2](../helm/ignite2) | Ignite 2 StatefulSet using the Kubernetes IP finder, with the RBAC it needs |
+| [helm/ignite-observability](../helm/ignite-observability) | Ignite REST exporter, Prometheus, and Grafana with the Ignite Lab Overview dashboard |
+| [k8s/ignite3](ignite3) | Plain manifests to read or `kubectl apply` with no Helm involved |
+
+Every chart ships `values-dev.yaml` (small, no persistence) and
+`values-prod.yaml` (replicas, PVCs, anti-affinity, PDB).
 
 The manifests in `k8s/ignite3/` are a rendered snapshot of the chart defaults,
 so the two never drift. Regenerate them after changing the chart:
@@ -51,6 +56,60 @@ with `-f`:
 helm install ignite3 helm/ignite-lab -f helm/ignite-lab/values-dev.yaml   # 1 node, no PVC
 helm install ignite3 helm/ignite-lab -f helm/ignite-lab/values-prod.yaml  # 3 nodes, PVCs, PDB
 ```
+
+
+## Ignite 2
+
+Ignite 2 cannot use the static node list the Compose lab relies on, so the
+chart switches discovery to `TcpDiscoveryKubernetesIpFinder`, which reads the
+headless Service's Endpoints:
+
+```bash
+helm install ignite2 helm/ignite2 --namespace ignite --create-namespace
+```
+
+Specific to this chart:
+
+- **`ignite-kubernetes` is added to `OPTION_LIBS`** — the IP finder lives in
+  that optional module and the node will not start without it.
+- **RBAC is created by default** — a ServiceAccount plus a Role granting
+  `get/list/watch` on `endpoints`, which is the only API access Ignite needs.
+- **The headless Service sets `publishNotReadyAddresses`** — the IP finder's
+  `includeNotReadyAddresses` is not a JavaBean setter and cannot be set from
+  Spring XML. Without the Service flag, pods starting in parallel would see no
+  peers and each would form its own cluster.
+- **A post-install job runs `control.sh --set-state ACTIVE`** — a persistent
+  Ignite 2 cluster stays INACTIVE until activated once.
+- **`maxSize` is rendered with `int64`** — Helm turns large integers into
+  float64, and Ignite rejects `2.68435456e+08` with a `NumberFormatException`.
+
+The image defaults to `apacheignite/ignite:2.18.0` (linux/amd64). On Apple
+Silicon set `image.tag=2.18.0-arm64`.
+
+## Observability
+
+```bash
+helm install obs helm/ignite-observability --namespace ignite
+kubectl -n ignite port-forward svc/obs-ignite-observability-grafana 3000:3000
+```
+
+The exporter has **no public image** — build and push it first, then point the
+chart at it:
+
+```bash
+docker build -t <registry>/ignite-exporter:1.0.0 ops/exporter
+docker push  <registry>/ignite-exporter:1.0.0
+helm install obs helm/ignite-observability \
+  --set exporter.image.repository=<registry>/ignite-exporter
+```
+
+The chart polls the Ignite pods over REST exactly as the Compose `ops/` stack
+does, and provisions the same **Ignite Lab Overview** dashboard. The dashboard
+JSON is copied into the chart because Helm cannot read files outside a chart
+directory; CI fails if that copy drifts from `ops/grafana/dashboards/`.
+
+Defaults assume the Ignite releases are named `ignite2` and `ignite3` in the
+same namespace. Override `ignite2.endpoints` / `ignite3.endpoints` otherwise.
 
 ## Reaching the cluster
 

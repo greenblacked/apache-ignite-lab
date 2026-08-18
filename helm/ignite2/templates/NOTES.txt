@@ -1,0 +1,25 @@
+{{ include "ignite2.fullname" . }} is installing {{ .Values.replicaCount }} Ignite {{ .Chart.AppVersion }} node(s).
+
+Watch them start:
+  kubectl --namespace {{ .Release.Namespace }} rollout status statefulset/{{ include "ignite2.fullname" . }}
+
+{{ if .Values.clusterActivation.enabled -}}
+The cluster is activated by a post-install job:
+  kubectl --namespace {{ .Release.Namespace }} logs job/{{ include "ignite2.fullname" . }}-activate
+{{- else -}}
+clusterActivation is disabled, so the cluster stays INACTIVE. Activate it with:
+  kubectl --namespace {{ .Release.Namespace }} exec -it {{ include "ignite2.fullname" . }}-0 -- \
+    bash -c '$(ls -d /opt/ignite/apache-ignite*/bin)/control.sh --set-state ACTIVE --yes'
+{{- end }}
+
+Reach the cluster from your machine:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "ignite2.fullname" . }} {{ .Values.ports.rest }}:{{ .Values.ports.rest }} {{ .Values.ports.client }}:{{ .Values.ports.client }}
+  curl "http://127.0.0.1:{{ .Values.ports.rest }}/ignite?cmd=version&ignite.login={{ .Values.auth.user }}&ignite.password=<password>"
+
+{{ if and .Values.auth.enabled (not .Values.auth.existingSecret) -}}
+WARNING: using the default lab password from values.yaml. Set auth.password or
+auth.existingSecret before this is reachable by anyone else.
+{{- end }}
+{{ if not .Values.persistence.enabled -}}
+WARNING: persistence is disabled. All data is lost when a pod restarts.
+{{- end }}

@@ -142,16 +142,23 @@ See [examples/README.md](examples/README.md).
 | Python 3.10–3.13 | Mocked example tests and the exporter unit tests; no cluster or Ignite client packages needed |
 | Java examples | `mvn verify` for both modules on Temurin 17 (`exec:java` is skipped because it needs a live cluster) |
 | Lab smoke test | Boots Ignite 2, Ignite 3, and `ops/` on the runner, then runs `./scripts/smoke-test.sh` and tears the stacks down |
-| Helm and manifests | `helm lint` and `helm template` for every values file, `kubeconform` schema validation of the rendered output and `k8s/`, and a drift check that the raw manifests still match the chart |
+| Helm and manifests | `helm lint` and `helm template` for all three charts across every values file, `kubeconform` schema validation of the rendered output and `k8s/`, and drift checks on the raw manifests and the copied Grafana dashboard |
 
 The smoke-test job overrides `IGNITE2_IMAGE`/`IGNITE3_IMAGE` because GitHub runners are x86_64 while `.env` pins arm64 images for Apple Silicon. It supplies the lab defaults through job `env`, since `.env` is gitignored and absent in CI. Python 3.10 is the floor: `ops/exporter/exporter.py` evaluates a PEP 604 union at import time.
 
 ## Kubernetes
 
-[k8s/README.md](k8s/README.md) covers running Ignite 3 on Kubernetes, either
-through the [helm/ignite-lab](helm/ignite-lab) chart or the plain manifests in
-[k8s/ignite3](k8s/ignite3). The chart ships `values-dev.yaml` (one node, no
-persistence) and `values-prod.yaml` (three nodes, PVCs, anti-affinity, PDB).
+[k8s/README.md](k8s/README.md) covers running the lab on Kubernetes. Three
+charts, each with `values-dev.yaml` and `values-prod.yaml` examples:
+
+| Chart | Deploys |
+|-------|---------|
+| [helm/ignite-lab](helm/ignite-lab) | Ignite 3, static discovery via headless Service |
+| [helm/ignite2](helm/ignite2) | Ignite 2, Kubernetes IP finder plus RBAC |
+| [helm/ignite-observability](helm/ignite-observability) | Exporter, Prometheus, Grafana with the Ignite Lab Overview dashboard |
+
+Plain manifests for Ignite 3 live in [k8s/ignite3](k8s/ignite3) for use without
+Helm.
 
 ```bash
 helm install ignite3 helm/ignite-lab --namespace ignite --create-namespace

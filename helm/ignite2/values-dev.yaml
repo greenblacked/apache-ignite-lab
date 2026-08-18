@@ -1,0 +1,19 @@
+# One node, no PVC, small heap.
+# helm install ignite2 ./helm/ignite2 -f helm/ignite2/values-dev.yaml
+replicaCount: 1
+
+jvm:
+  heap: 512m
+
+persistence:
+  enabled: false
+
+dataRegion:
+  maxSizeBytes: 134217728
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 1Gi
+  limits:
+    memory: 1Gi

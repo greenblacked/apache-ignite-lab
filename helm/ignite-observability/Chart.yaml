@@ -1,0 +1,13 @@
+apiVersion: v2
+name: ignite-observability
+description: Ignite REST exporter, Prometheus, and Grafana with the Ignite Lab Overview dashboard
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - ignite
+  - prometheus
+  - grafana
+  - observability
+sources:
+  - https://github.com/greenblacked/apache-ignite-lab

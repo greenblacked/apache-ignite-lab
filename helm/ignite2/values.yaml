@@ -1,0 +1,90 @@
+replicaCount: 3
+
+image:
+  # The plain tag is linux/amd64. On Apple Silicon use 2.18.0-arm64.
+  repository: apacheignite/ignite
+  tag: "2.18.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# ignite-kubernetes supplies TcpDiscoveryKubernetesIpFinder; the others match
+# the Compose lab (REST needs both ignite-rest-http and ignite-json).
+optionLibs: ignite-rest-http,ignite-json,ignite-indexing,ignite-kubernetes
+
+jvm:
+  heap: 1g
+  extraOpts: ""
+
+# Ignite 2 starts with the built-in ignite/ignite account. The chart stores the
+# password in a Secret; override it before using this anywhere real.
+auth:
+  enabled: true
+  user: ignite
+  password: ignite
+  # Use an existing Secret with a "password" key instead of the value above.
+  existingSecret: ""
+
+# Off-heap data region. Keep resources.limits.memory above heap + this.
+dataRegion:
+  maxSizeBytes: 268435456
+  persistenceEnabled: true
+
+ports:
+  discovery: 47500
+  communication: 47100
+  rest: 8080
+  client: 10800
+
+persistence:
+  enabled: true
+  size: 8Gi
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+
+service:
+  type: ClusterIP
+  annotations: {}
+
+# Ignite 2 with persistence stays INACTIVE until the cluster is activated.
+clusterActivation:
+  enabled: true
+  backoffLimit: 6
+
+rbac:
+  # Creates the ServiceAccount, Role, and RoleBinding the IP finder needs to
+  # read Endpoints. Disable only if you manage RBAC yourself.
+  create: true
+  serviceAccountName: ""
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 2Gi
+  limits:
+    memory: 2Gi
+
+probes:
+  readiness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 30
+  liveness:
+    initialDelaySeconds: 180
+    periodSeconds: 20
+    failureThreshold: 6
+
+podSecurityContext: {}
+securityContext: {}
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 2

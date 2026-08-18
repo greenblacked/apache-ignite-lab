@@ -1,0 +1,52 @@
+{{- if .Values.clusterActivation.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "ignite2.fullname" . }}-activate
+  labels:
+    {{- include "ignite2.labels" . | nindent 4 }}
+  annotations:
+    # A persistent Ignite 2 cluster stays INACTIVE until it is activated once.
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: {{ .Values.clusterActivation.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "ignite2.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: activate
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            {{- if .Values.auth.enabled }}
+            - name: IGNITE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ignite2.secretName" . }}
+                  key: password
+            {{- end }}
+          command:
+            - bash
+            - -c
+            # The bin directory carries the version in its name, so resolve it
+            # at runtime rather than hardcoding a path.
+            - |
+              set -e
+              BIN=$(ls -d /opt/ignite/apache-ignite*/bin | head -1)
+              "$BIN"/control.sh \
+                --host {{ include "ignite2.fullname" . }}-0.{{ include "ignite2.headless" . }} \
+                {{- if .Values.auth.enabled }}
+                --user {{ .Values.auth.user | quote }} \
+                --password "$IGNITE_PASSWORD" \
+                {{- end }}
+                --set-state ACTIVE --yes
+{{- end }}

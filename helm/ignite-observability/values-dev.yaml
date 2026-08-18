@@ -1,0 +1,9 @@
+# Ephemeral: no PVCs, minimal resources.
+prometheus:
+  persistence:
+    enabled: false
+  retention: 2d
+
+grafana:
+  persistence:
+    enabled: false

@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ignite2.headless" . }}
+  labels:
+    {{- include "ignite2.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  # The IP finder reads this Service's Endpoints. Without this flag no pod
+  # appears until it is Ready, so parallel-starting pods would each form their
+  # own cluster.
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "ignite2.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: discovery
+      port: {{ .Values.ports.discovery }}
+      targetPort: discovery
+    - name: communication
+      port: {{ .Values.ports.communication }}
+      targetPort: communication
+    - name: rest
+      port: {{ .Values.ports.rest }}
+      targetPort: rest
+    - name: client
+      port: {{ .Values.ports.client }}
+      targetPort: client

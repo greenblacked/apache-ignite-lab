@@ -1,0 +1,105 @@
+{{- $name := include "obs.exporterName" . -}}
+{{- if or .Values.ignite2.existingSecret .Values.ignite3.existingSecret }}
+{{- else }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}-auth
+  labels:
+    {{- include "obs.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  ignite2-password: {{ .Values.ignite2.password | quote }}
+  ignite3-password: {{ .Values.ignite3.password | quote }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "obs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: exporter
+spec:
+  replicas: {{ .Values.exporter.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: exporter
+  template:
+    metadata:
+      labels:
+        {{- include "obs.labels" . | nindent 8 }}
+        app.kubernetes.io/component: exporter
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+        - name: exporter
+          image: "{{ .Values.exporter.image.repository }}:{{ .Values.exporter.image.tag }}"
+          imagePullPolicy: {{ .Values.exporter.image.pullPolicy }}
+          env:
+            - name: EXPORTER_PORT
+              value: {{ .Values.exporter.port | quote }}
+            - name: EXPORTER_TIMEOUT_SECONDS
+              value: {{ .Values.exporter.timeoutSeconds | quote }}
+            - name: IGNITE2_ENDPOINTS
+              value: {{ .Values.ignite2.endpoints | quote }}
+            - name: IGNITE2_USER
+              value: {{ .Values.ignite2.user | quote }}
+            - name: IGNITE2_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (printf "%s-auth" $name) .Values.ignite2.existingSecret }}
+                  key: ignite2-password
+            - name: IGNITE3_ENDPOINTS
+              value: {{ .Values.ignite3.endpoints | quote }}
+            - name: IGNITE3_USER
+              value: {{ .Values.ignite3.user | quote }}
+            - name: IGNITE3_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (printf "%s-auth" $name) .Values.ignite3.existingSecret }}
+                  key: ignite3-password
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.exporter.port }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          {{- with .Values.exporter.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "obs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: exporter
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: exporter
+  ports:
+    - name: metrics
+      port: {{ .Values.exporter.port }}
+      targetPort: metrics

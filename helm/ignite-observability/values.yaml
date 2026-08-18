@@ -1,0 +1,84 @@
+exporter:
+  # No public image exists for this exporter: build ops/exporter and push it to
+  # a registry your cluster can pull from, then set repository/tag here.
+  #   docker build -t <registry>/ignite-exporter:1.0.0 ops/exporter
+  #   docker push  <registry>/ignite-exporter:1.0.0
+  image:
+    repository: ignite-exporter
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  port: 8000
+  timeoutSeconds: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+# Cluster endpoints the exporter polls. Defaults assume both Ignite charts are
+# installed in this namespace under the release names "ignite2" and "ignite3".
+ignite2:
+  enabled: true
+  endpoints: "http://ignite2-0.ignite2-headless:8080,http://ignite2-1.ignite2-headless:8080,http://ignite2-2.ignite2-headless:8080"
+  user: ignite
+  password: ignite
+  existingSecret: ""
+
+ignite3:
+  enabled: true
+  endpoints: "http://ignite3-0.ignite3-headless:10300,http://ignite3-1.ignite3-headless:10300,http://ignite3-2.ignite3-headless:10300"
+  user: ignite
+  password: ignite-lab-pass
+  existingSecret: ""
+
+prometheus:
+  enabled: true
+  image:
+    repository: prom/prometheus
+    tag: v2.55.1
+    pullPolicy: IfNotPresent
+  port: 9090
+  scrapeIntervalSeconds: 15
+  retention: 15d
+  persistence:
+    enabled: false
+    size: 10Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+grafana:
+  enabled: true
+  image:
+    repository: grafana/grafana
+    tag: 11.3.1
+    pullPolicy: IfNotPresent
+  port: 3000
+  adminUser: admin
+  adminPassword: admin
+  existingSecret: ""
+  persistence:
+    enabled: false
+    size: 5Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+service:
+  type: ClusterIP
+  annotations: {}
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

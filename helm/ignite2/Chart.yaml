@@ -1,0 +1,13 @@
+apiVersion: v2
+name: ignite2
+description: Apache Ignite 2 cluster as a StatefulSet using Kubernetes discovery
+type: application
+version: 0.1.0
+appVersion: "2.18.0"
+keywords:
+  - ignite
+  - database
+  - distributed
+home: https://ignite.apache.org/
+sources:
+  - https://github.com/greenblacked/apache-ignite-lab
