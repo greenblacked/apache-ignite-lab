@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Shell and Compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ShellCheck helper scripts
+        run: shellcheck scripts/*.sh
+
+      - name: Validate Compose files
+        run: |
+          for compose_file in \
+            ignite2/docker-compose.yml \
+            ignite3/docker-compose.yml \
+            ops/docker-compose.yml \
+            monitoring/docker-compose.yml \
+            monitoring/prometheus/docker-compose.yml \
+            monitoring/grafana/docker-compose.yml \
+            monitoring/dynatrace/docker-compose.yml
+          do
+            echo "::group::$compose_file"
+            docker compose -f "$compose_file" config -q
+            echo "::endgroup::"
+          done
+
+      # The overlay uses ${VAR:?} guards, so it only renders with both set.
+      # These placeholders validate syntax; they never reach a real tenant.
+      - name: Validate optional Dynatrace export overlay
+        env:
+          DT_ENDPOINT: https://example.live.dynatrace.com/api/v2/otlp
+          DT_API_TOKEN: placeholder-for-config-validation
+        run: |
+          docker compose \
+            -f monitoring/dynatrace/docker-compose.yml \
+            -f monitoring/dynatrace/docker-compose.dynatrace.yml \
+            config -q
+
+  unit-tests:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # exporter.py uses PEP 604 unions at runtime, so 3.10 is the floor.
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Mocked: contacts no cluster and needs no Ignite client packages.
+      - name: Example tests
+        run: python -m unittest discover -s examples/tests -v
+
+      # test_exporter.py imports exporter.py as a top-level module.
+      - name: Exporter tests
+        working-directory: ops/exporter
+        run: python -m unittest discover -s . -v
+
+  java-build:
+    name: Java examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      # verify compiles and packages; exec:java is omitted because it needs
+      # a live cluster.
+      - name: Build Ignite 2 example
+        working-directory: examples/ignite2/java
+        run: mvn -B -ntp verify
+
+      - name: Build Ignite 3 example
+        working-directory: examples/ignite3/java
+        run: mvn -B -ntp verify
+
+  integration:
+    name: Lab smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [lint]
+    env:
+      # Runners are x86_64; .env pins arm64 images for Apple Silicon.
+      IGNITE2_IMAGE: apacheignite/ignite:2.18.0
+      IGNITE3_IMAGE: apacheignite/ignite:3.1.0
+      # Six JVMs on one runner. Lower this first if the job hits memory limits.
+      IGNITE_HEAP: 1g
+      # No .env in CI (it is gitignored), so the lab defaults are set here.
+      IGNITE_LAB_USER: ignite
+      IGNITE2_PASSWORD: ignite
+      IGNITE_LAB_PASSWORD: ignite-lab-pass
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    steps:
+      - uses: actions/checkout@v4
+
+      # Each up script creates the shared network if it is missing.
+      - name: Start Ignite 2
+        run: ./scripts/ignite2-up.sh
+
+      - name: Start Ignite 3
+        run: ./scripts/ignite3-up.sh
+
+      - name: Initialize Ignite 3
+        run: ./scripts/ignite3-init.sh
+
+      - name: Start observability stack
+        run: ./scripts/ops-up.sh
+
+      - name: Read-only smoke test
+        run: ./scripts/smoke-test.sh
+
+      - name: Container state on failure
+        if: failure()
+        run: |
+          docker ps -a
+          for stack in ignite2 ignite3 ops; do
+            echo "::group::$stack logs"
+            docker compose -f "$stack/docker-compose.yml" logs --tail 200 || true
+            echo "::endgroup::"
+          done
+
+      - name: Tear down
+        if: always()
+        run: ./scripts/down-all.sh --wipe

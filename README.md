@@ -1,5 +1,7 @@
 # Apache Ignite Practice Lab
 
+[![CI](https://github.com/greenblacked/apache-ignite-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/greenblacked/apache-ignite-lab/actions/workflows/ci.yml)
+
 Local, production-shaped Docker Compose lab for **Ignite 2.18** and **Ignite 3.1** on Apple Silicon: 3-node clusters, persistence, auth, Prometheus/Grafana, helper scripts, and starter clients.
 
 ## Prerequisites
@@ -130,6 +132,19 @@ See [examples/README.md](examples/README.md).
 4. Run the Ignite 3 Python or Java example to create a RocksDB zone/table and verify write/read behavior
 5. Start ops; open Prometheus targets and Grafana dashboard **Ignite Lab Overview**
 6. Kill one node container; observe cluster behavior; bring it back
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on pushes to `master`, on pull requests, and on manual dispatch.
+
+| Job | What it checks |
+|-----|----------------|
+| Shell and Compose | `shellcheck` over `scripts/*.sh`; `docker compose config` for every Compose file, including the optional Dynatrace overlay rendered with placeholder credentials |
+| Python 3.10–3.13 | Mocked example tests and the exporter unit tests; no cluster or Ignite client packages needed |
+| Java examples | `mvn verify` for both modules on Temurin 17 (`exec:java` is skipped because it needs a live cluster) |
+| Lab smoke test | Boots Ignite 2, Ignite 3, and `ops/` on the runner, then runs `./scripts/smoke-test.sh` and tears the stacks down |
+
+The smoke-test job overrides `IGNITE2_IMAGE`/`IGNITE3_IMAGE` because GitHub runners are x86_64 while `.env` pins arm64 images for Apple Silicon. It supplies the lab defaults through job `env`, since `.env` is gitignored and absent in CI. Python 3.10 is the floor: `ops/exporter/exporter.py` evaluates a PEP 604 union at import time.
 
 ## Production parallels vs lab simplifications
 
