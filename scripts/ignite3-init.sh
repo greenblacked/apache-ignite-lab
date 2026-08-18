@@ -45,12 +45,28 @@ if [[ "$ANONYMOUS_CODE" == "401" || "$ANONYMOUS_CODE" == "403" ]]; then
   exit 1
 fi
 
+# "cluster init" returns before the cluster accepts configuration writes, so
+# a config update issued immediately after it fails with "Cannot update
+# cluster config". Wait for the cluster state endpoint to answer first.
+wait_for_cluster_state() {
+  for _ in $(seq 1 60); do
+    if [[ "$(http_code "$HOST_CLUSTER_URL")" == "200" ]]; then
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "Cluster did not report a readable state after initialization." >&2
+  return 1
+}
+
 if [[ "$ANONYMOUS_CODE" == "404" || "$ANONYMOUS_CODE" == "409" ]]; then
   echo "Initializing Ignite 3 cluster..."
   run_cli cluster init \
     --url "$CONTAINER_URL" \
     --name=ignite3-lab \
     --metastorage-group=ignite3-node1,ignite3-node2,ignite3-node3
+  wait_for_cluster_state
 elif [[ "$ANONYMOUS_CODE" == "200" ]]; then
   echo "Ignite 3 is initialized without authentication; completing security setup..."
 else
