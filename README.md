@@ -54,7 +54,6 @@ Wipe volumes: `./scripts/down-all.sh --wipe`
 | Ops | Grafana | 3000 |
 | Monitoring playground | Prometheus | 9091 |
 | Monitoring playground | Grafana | 3001 |
-| Monitoring playground | OTLP gRPC / HTTP | 4317 / 4318 |
 
 All published ports bind to `127.0.0.1`; they are not exposed on every host interface.
 
@@ -113,7 +112,7 @@ Grafana provisions the **Ignite Lab Overview** dashboard with node health, clust
 
 ## Independent monitoring playground
 
-The separate [monitoring playground](monitoring/README.md) runs Prometheus, Grafana, and an OpenTelemetry Collector without Ignite. It uses the `monitoring-lab` network and ports 9091/3001, so it can run beside the Ignite-coupled `ops/` stack on 9090/3000.
+The separate [monitoring playground](monitoring/README.md) runs Prometheus and Grafana without Ignite. It uses the `monitoring-lab` network and ports 9091/3001, so it can run beside the Ignite-coupled `ops/` stack on 9090/3000.
 
 ```bash
 ./scripts/monitoring-up.sh
@@ -139,7 +138,7 @@ See [examples/README.md](examples/README.md).
 
 | Job | What it checks |
 |-----|----------------|
-| Shell and Compose | `shellcheck` over `scripts/*.sh`; `docker compose config` for every Compose file, including the optional Dynatrace overlay rendered with placeholder credentials |
+| Shell and Compose | `shellcheck` over `scripts/*.sh`; `docker compose config` for every Compose file |
 | Python 3.10–3.13 | Mocked example tests and the exporter unit tests; no cluster or Ignite client packages needed |
 | Java examples | `mvn verify` for both modules on Temurin 17 (`exec:java` is skipped because it needs a live cluster) |
 | Lab smoke test | Boots Ignite 2, Ignite 3, and `ops/` on the runner, then runs `./scripts/smoke-test.sh` and tears the stacks down |

@@ -32,25 +32,12 @@ jobs:
             ops/docker-compose.yml \
             monitoring/docker-compose.yml \
             monitoring/prometheus/docker-compose.yml \
-            monitoring/grafana/docker-compose.yml \
-            monitoring/dynatrace/docker-compose.yml
+            monitoring/grafana/docker-compose.yml
           do
             echo "::group::$compose_file"
             docker compose -f "$compose_file" config -q
             echo "::endgroup::"
           done
-
-      # The overlay uses ${VAR:?} guards, so it only renders with both set.
-      # These placeholders validate syntax; they never reach a real tenant.
-      - name: Validate optional Dynatrace export overlay
-        env:
-          DT_ENDPOINT: https://example.live.dynatrace.com/api/v2/otlp
-          DT_API_TOKEN: placeholder-for-config-validation
-        run: |
-          docker compose \
-            -f monitoring/dynatrace/docker-compose.yml \
-            -f monitoring/dynatrace/docker-compose.dynatrace.yml \
-            config -q
 
   unit-tests:
     name: Python ${{ matrix.python-version }}

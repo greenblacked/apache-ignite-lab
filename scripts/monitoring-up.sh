@@ -45,7 +45,7 @@ wait_for_healthy_service() {
   return 1
 }
 
-for SERVICE in prometheus grafana otel-collector; do
+for SERVICE in prometheus grafana; do
   wait_for_healthy_service "$SERVICE"
 done
 
@@ -55,6 +55,4 @@ curl -fsS --max-time 5 http://127.0.0.1:3001/api/health >/dev/null
 echo "Prometheus: http://127.0.0.1:9091/"
 echo "Grafana:    http://127.0.0.1:3001/"
 echo "Grafana login: ${MONITORING_GF_ADMIN_USER:-admin} / value from MONITORING_GF_ADMIN_PASSWORD (default playground)"
-echo "OTLP/gRPC:  127.0.0.1:4317"
-echo "OTLP/HTTP:  http://127.0.0.1:4318/"
 

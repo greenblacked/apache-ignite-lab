@@ -1,5 +1,4 @@
 include:
   - path: ./prometheus/docker-compose.yml
   - path: ./grafana/docker-compose.yml
-  - path: ./dynatrace/docker-compose.yml
 
