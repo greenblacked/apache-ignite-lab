@@ -46,7 +46,7 @@ jobs:
           promtool() {
             docker run --rm --entrypoint promtool \
               -v "$PWD:/workspace:ro" -w /workspace \
-              prom/prometheus:v2.55.1 "$@"
+              prom/prometheus:v3.14.0 "$@"
           }
           promtool check config ops/prometheus/prometheus.yml
           promtool check config monitoring/prometheus/prometheus.yml
@@ -121,7 +121,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
         with:
           version: v3.16.3
 

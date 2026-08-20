@@ -37,7 +37,7 @@ prometheus:
   enabled: true
   image:
     repository: prom/prometheus
-    tag: v2.55.1
+    tag: v3.14.0
     pullPolicy: IfNotPresent
   port: 9090
   scrapeIntervalSeconds: 15
@@ -62,7 +62,7 @@ grafana:
   enabled: true
   image:
     repository: grafana/grafana
-    tag: 11.3.1
+    tag: 12.4.9
     pullPolicy: IfNotPresent
   port: 3000
   adminUser: admin
