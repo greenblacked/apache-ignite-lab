@@ -44,3 +44,11 @@ metastorage group passed to "cluster init".
 {{- end -}}
 {{- join "," $names -}}
 {{- end -}}
+
+{{- define "ignite-lab.secretName" -}}
+{{- if .Values.auth.existingSecret -}}
+{{- .Values.auth.existingSecret -}}
+{{- else -}}
+{{- printf "%s-auth" (include "ignite-lab.fullname" .) -}}
+{{- end -}}
+{{- end -}}

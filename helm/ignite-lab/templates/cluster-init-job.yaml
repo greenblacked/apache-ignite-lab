@@ -29,12 +29,116 @@ spec:
         - name: cluster-init
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args:
-            - cli
-            - cluster
-            - init
-            - --url
-            - http://{{ $full }}-0.{{ $headless }}:{{ .Values.ports.rest }}
-            - --name={{ .Values.clusterInit.clusterName }}
-            - --metastorage-group={{ include "ignite-lab.nodeNames" . }}
+          {{- if .Values.auth.enabled }}
+          env:
+            - name: IGNITE_USER
+              value: {{ .Values.auth.user | quote }}
+            - name: IGNITE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ignite-lab.secretName" . }}
+                  key: password
+          {{- end }}
+          # The image entrypoint dispatches a single "cli" invocation, but
+          # bootstrapping needs several, so call the CLI binary directly and
+          # reproduce what the entrypoint does for it.
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+
+              CLI="${IGNITE_CLI_HOME:-/opt/ignite3cli}/bin/ignite3"
+              CLI_WORK_DIR="${IGNITE_CLI_WORK_DIR:-/opt/ignite/work/ignite3cli}"
+              # The entrypoint repoints user.home so CLI state lands in the
+              # work directory instead of an unwritable home.
+              IGNITE3_OPTS="-Duser.home=$CLI_WORK_DIR"
+              export IGNITE3_OPTS
+              mkdir -p "$CLI_WORK_DIR"
+
+              URL="http://{{ $full }}-0.{{ $headless }}:{{ .Values.ports.rest }}"
+              {{- if .Values.auth.enabled }}
+
+              # Store the credentials in the CLI profile rather than passing
+              # them per command: the CLI attaches them to every --url call,
+              # so the same commands work before and after security is on.
+              "$CLI" cli config set "ignite.auth.basic.username=$IGNITE_USER"
+              "$CLI" cli config set "ignite.auth.basic.password=$IGNITE_PASSWORD"
+              {{- end }}
+
+              # Succeeds only once the cluster is initialized and, when
+              # security is already on, the stored credentials are accepted.
+              cluster_readable() {
+                "$CLI" cluster config show --url "$URL" >/dev/null 2>&1
+              }
+
+              initialized=no
+              attempt=0
+              while [ "$attempt" -lt 60 ]; do
+                if cluster_readable; then
+                  initialized=yes
+                  break
+                fi
+                if "$CLI" cluster init --url "$URL" \
+                  --name={{ .Values.clusterInit.clusterName }} \
+                  --metastorage-group={{ include "ignite-lab.nodeNames" . }}; then
+                  initialized=yes
+                  break
+                fi
+                echo "Waiting for nodes to accept cluster init..."
+                attempt=$((attempt + 1))
+                sleep 5
+              done
+
+              if [ "$initialized" != yes ]; then
+                echo "Cluster did not initialize." >&2
+                {{- if .Values.auth.enabled }}
+                echo "If it is already initialized and secured, the configured" >&2
+                echo "auth.password no longer matches the stored credential." >&2
+                {{- end }}
+                exit 1
+              fi
+
+              # "cluster init" returns before the cluster accepts configuration
+              # writes, so the next update would fail with "Cannot update
+              # cluster config". Wait for a readable state first.
+              attempt=0
+              while [ "$attempt" -lt 60 ]; do
+                cluster_readable && break
+                attempt=$((attempt + 1))
+                sleep 2
+              done
+              if ! cluster_readable; then
+                echo "Cluster never became readable after init." >&2
+                exit 1
+              fi
+              {{- if .Values.auth.enabled }}
+
+              # HOCON string value: escape backslashes before double quotes.
+              ESCAPED=$(printf '%s' "$IGNITE_PASSWORD" \
+                | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+
+              # Password first, then the switch: enabling security before the
+              # account has its password locks the cluster out.
+              "$CLI" cluster config update --url "$URL" \
+                "ignite.security.authentication.providers.default.users.$IGNITE_USER.password=\"$ESCAPED\""
+              "$CLI" cluster config update --url "$URL" \
+                "ignite.security.enabled=true"
+
+              attempt=0
+              while [ "$attempt" -lt 15 ]; do
+                if cluster_readable; then
+                  echo "Cluster initialized with authentication enabled."
+                  exit 0
+                fi
+                attempt=$((attempt + 1))
+                sleep 2
+              done
+
+              echo "Security was submitted, but authenticated access failed." >&2
+              exit 1
+              {{- else }}
+
+              echo "Cluster initialized. Authentication is off (auth.enabled=false)."
+              {{- end }}
 {{- end }}

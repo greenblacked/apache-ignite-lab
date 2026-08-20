@@ -42,6 +42,11 @@ prometheus:
   port: 9090
   scrapeIntervalSeconds: 15
   retention: 15d
+  # Loads the alert rules copied from ops/prometheus/rules/. The chart ships no
+  # Alertmanager, so firing alerts are only visible on the /alerts page and
+  # through the Prometheus datasource in Grafana.
+  alertRules:
+    enabled: true
   persistence:
     enabled: false
     size: 10Gi

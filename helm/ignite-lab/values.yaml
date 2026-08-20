@@ -24,6 +24,20 @@ storage:
     - name: rocksDbProfile
       engine: rocksdb
 
+# Ignite 3 security is cluster configuration rather than node configuration, so
+# it is switched on by the post-install job after "cluster init" -- the same
+# order scripts/ignite3-init.sh uses for the Compose lab. The chart stores the
+# password in a Secret; override it before using this anywhere real.
+#
+# Keep user "ignite": the bootstrap only sets a password on the built-in
+# account, exactly like the Compose lab.
+auth:
+  enabled: true
+  user: ignite
+  password: ignite-lab-pass
+  # Use an existing Secret with a "password" key instead of the value above.
+  existingSecret: ""
+
 ports:
   cluster: 3344
   rest: 10300
