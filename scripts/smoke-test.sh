@@ -115,6 +115,27 @@ wait_for_prometheus_query() {
   fail "$label did not become ready"
 }
 
+wait_for_prometheus_rules() {
+  local label="$1"
+  local program="$2"
+  local payload=""
+
+  for _ in $(seq 1 15); do
+    payload=$(curl -fsS --connect-timeout 2 --max-time 10 \
+      http://127.0.0.1:9090/api/v1/rules 2>/dev/null || true)
+    if [[ -n "$payload" ]] && json_matches "$payload" "$program"; then
+      pass "$label"
+      return 0
+    fi
+    sleep 2
+  done
+
+  if [[ -n "$payload" ]]; then
+    printf '%s' "$payload" | python3 -c "$program" || true
+  fi
+  fail "$label did not become ready"
+}
+
 echo "Running read-only Ignite lab smoke checks..."
 
 IGNITE2_PORTS=(8080 8081 8082)
@@ -186,6 +207,14 @@ wait_for_prometheus_query "Six exported Ignite nodes" \
 wait_for_prometheus_query "Both Ignite clusters ready" \
   ignite_cluster_ready \
   'import json,sys; d=json.load(sys.stdin); r=d.get("data",{}).get("result",[]); assert {x["metric"].get("stack") for x in r}=={"ignite2","ignite3"}; assert all(float(x["value"][1])==1 for x in r)'
+
+wait_for_prometheus_rules "Prometheus alert rules loaded" \
+  'import json,sys; d=json.load(sys.stdin); g=d.get("data",{}).get("groups",[]); assert d.get("status")=="success"; assert {x.get("name") for x in g}>={"ignite-lab-exporter","ignite-lab-cluster","ignite-lab-nodes"}; assert sum(len(x.get("rules",[])) for x in g)>=8'
+
+# A healthy lab fires nothing. "pending" is tolerated: an alert can still be
+# counting down from the seconds before the stacks finished starting.
+wait_for_prometheus_rules "No Ignite alerts firing" \
+  'import json,sys; d=json.load(sys.stdin); g=d.get("data",{}).get("groups",[]); firing=[r.get("name") for x in g for r in x.get("rules",[]) if r.get("state")=="firing"]; assert not firing, firing'
 
 GRAFANA_HEALTH=$(fetch_json "Grafana health" http://127.0.0.1:3000/api/health)
 check_json "Grafana database health" "$GRAFANA_HEALTH" \

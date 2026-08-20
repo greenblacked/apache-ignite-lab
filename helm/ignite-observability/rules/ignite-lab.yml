@@ -1,0 +1,125 @@
+# Alert rules over the metrics ops/exporter/exporter.py publishes.
+#
+# The lab ships no Alertmanager, so nothing is paged or emailed: firing alerts
+# are visible at http://127.0.0.1:9090/alerts and, through the Prometheus
+# datasource, in Grafana. Add an Alertmanager receiver here when practising
+# notification routing.
+#
+# "for" durations are deliberately short. The practice checklist kills a node
+# and expects to watch the result inside one exercise, not after a production
+# grade soak window.
+groups:
+  - name: ignite-lab-exporter
+    rules:
+      - alert: IgniteExporterDown
+        # Prometheus itself cannot reach the exporter, so every other rule in
+        # this file is blind. Alert on it first.
+        expr: up{job="ignite-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Prometheus cannot scrape the Ignite lab exporter
+          description: >-
+            The ignite-exporter target has been down for more than a minute.
+            Check "docker compose -f ops/docker-compose.yml ps" and the
+            exporter logs; no Ignite health data is being collected.
+
+      - alert: IgniteExporterCollectionFailing
+        # The exporter answers /metrics but its collection raised, so it emits
+        # only this single metric and no per-stack series at all.
+        expr: ignite_exporter_collection_error == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: The Ignite lab exporter failed to collect any metrics
+          description: >-
+            Metric collection raised an unexpected error, so no per-stack
+            series are published. Check the exporter logs.
+
+      - alert: IgniteExporterScrapeSlow
+        expr: ignite_exporter_scrape_duration_seconds > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Collecting {{ $labels.stack }} metrics is slow
+          description: >-
+            One collection of the {{ $labels.stack }} stack took
+            {{ $value | printf "%.1f" }}s. The REST APIs behind it are
+            responding slowly, or nodes are timing out.
+
+  - name: ignite-lab-cluster
+    rules:
+      - alert: IgniteClusterNotReady
+        # ignite_cluster_ready folds together "topology API answered" and
+        # "cluster identity and version are known", which is the closest the
+        # exporter gets to "this cluster is usable".
+        expr: ignite_cluster_ready == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Ignite {{ $labels.stack }} cluster is not ready
+          description: >-
+            The {{ $labels.stack }} cluster has not reported a healthy
+            topology and identity for 2 minutes. For ignite3 this is usually
+            an uninitialized cluster: run ./scripts/ignite3-init.sh. For
+            ignite2 it is usually an inactive cluster.
+
+      - alert: IgniteClusterNodeMissing
+        # Fewer nodes in the topology than the exporter was configured to
+        # collect: a node left the cluster even if its container still runs.
+        expr: ignite_cluster_nodes < ignite_cluster_expected_nodes
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Ignite {{ $labels.stack }} is missing nodes from its topology
+          description: >-
+            The {{ $labels.stack }} topology reports fewer nodes than the
+            exporter is configured to collect (see
+            ignite_cluster_nodes and ignite_cluster_expected_nodes). A node
+            left the cluster or never joined it.
+
+      - alert: IgniteClusterTopologyUnavailable
+        expr: ignite_cluster_topology_up == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Ignite {{ $labels.stack }} topology API is not answering
+          description: >-
+            The exporter could not read the {{ $labels.stack }} topology. The
+            cluster may be down, uninitialized, or rejecting the lab
+            credentials.
+
+  - name: ignite-lab-nodes
+    rules:
+      - alert: IgniteNodeDown
+        expr: ignite_node_up == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Ignite node {{ $labels.node }} ({{ $labels.stack }}) is unreachable
+          description: >-
+            The management API of {{ $labels.node }} has not responded for 2
+            minutes. Expected while practising node failure; otherwise check
+            the container.
+
+      - alert: IgniteNodeUnhealthy
+        # The API answers but the node does not report a healthy running
+        # state: a different failure from being unreachable, so it is a
+        # separate alert rather than a wider expression on ignite_node_up.
+        expr: ignite_node_healthy == 0 and ignite_node_up == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Ignite node {{ $labels.node }} ({{ $labels.stack }}) is not healthy
+          description: >-
+            {{ $labels.node }} answers its management API but does not report
+            a healthy running state. Check ignite_node_info for the state it
+            reports.

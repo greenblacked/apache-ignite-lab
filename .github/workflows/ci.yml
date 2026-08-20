@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   lint:
-    name: Shell and Compose
+    name: Static checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -38,6 +38,33 @@ jobs:
             docker compose -f "$compose_file" config -q
             echo "::endgroup::"
           done
+
+      # promtool ships in the Prometheus image the lab already pins, so no
+      # separate download is needed.
+      - name: Validate Prometheus configs and alert rules
+        run: |
+          promtool() {
+            docker run --rm --entrypoint promtool \
+              -v "$PWD:/workspace:ro" -w /workspace \
+              prom/prometheus:v2.55.1 "$@"
+          }
+          promtool check config ops/prometheus/prometheus.yml
+          promtool check config monitoring/prometheus/prometheus.yml
+          # "check config" only resolves rule_files against the container's own
+          # filesystem, where the mount does not exist, so check the rules
+          # themselves explicitly.
+          promtool check rules ops/prometheus/rules/ignite-lab.yml
+
+      # A malformed dashboard reaches Grafana as a silently missing dashboard.
+      - name: Validate Grafana dashboard JSON
+        run: |
+          python3 -m json.tool ops/grafana/dashboards/ignite-lab.json > /dev/null
+          python3 -m json.tool monitoring/grafana/dashboards/monitoring-demo.json > /dev/null
+
+      # The smoke-test job builds this image too, but only after booting six
+      # JVMs. Failing here costs seconds instead of minutes.
+      - name: Build exporter image
+        run: docker build -t ignite-lab-exporter:ci ops/exporter
 
   unit-tests:
     name: Python ${{ matrix.python-version }}
@@ -142,6 +169,13 @@ jobs:
         run: |
           diff -u ops/grafana/dashboards/ignite-lab.json \
                   helm/ignite-observability/dashboards/ignite-lab.json
+
+      # Same reason as the dashboard: the chart cannot read ops/, so the alert
+      # rules are copied in. Fail if the copy falls behind.
+      - name: Prometheus alert rules copy is current
+        run: |
+          diff -u ops/prometheus/rules/ignite-lab.yml \
+                  helm/ignite-observability/rules/ignite-lab.yml
 
       # kubeconform validates against real Kubernetes schemas offline.
       # "kubectl apply --dry-run=client" is NOT usable here: it still fetches
