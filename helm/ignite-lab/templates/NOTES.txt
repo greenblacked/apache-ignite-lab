@@ -14,12 +14,38 @@ clusterInit is disabled, so the nodes stay in STARTING. Initialize manually:
       --url http://localhost:{{ .Values.ports.rest }} \
       --name={{ .Values.clusterInit.clusterName }} \
       --metastorage-group={{ include "ignite-lab.nodeNames" . }}
+{{- if .Values.auth.enabled }}
+
+Security is cluster configuration, so it is applied after init. Set the
+password before enabling it, or the account is locked out:
+  kubectl --namespace {{ .Release.Namespace }} exec -it {{ include "ignite-lab.fullname" . }}-0 -- \
+    /opt/ignite3cli/bin/ignite3 cluster config update \
+      --url http://localhost:{{ .Values.ports.rest }} \
+      'ignite.security.authentication.providers.default.users.{{ .Values.auth.user }}.password="<password>"'
+  kubectl --namespace {{ .Release.Namespace }} exec -it {{ include "ignite-lab.fullname" . }}-0 -- \
+    /opt/ignite3cli/bin/ignite3 cluster config update \
+      --url http://localhost:{{ .Values.ports.rest }} \
+      'ignite.security.enabled=true'
+{{- end }}
+{{- end }}
+{{ if .Values.auth.enabled }}
+Authentication is enabled for user {{ .Values.auth.user | quote }}. Read the password with:
+  kubectl --namespace {{ .Release.Namespace }} get secret {{ include "ignite-lab.secretName" . }} \
+    -o jsonpath='{.data.password}' | base64 -d
 {{- end }}
 
 Reach the cluster from your machine:
   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "ignite-lab.fullname" . }} {{ .Values.ports.rest }}:{{ .Values.ports.rest }} {{ .Values.ports.client }}:{{ .Values.ports.client }}
-  curl http://127.0.0.1:{{ .Values.ports.rest }}/management/v1/cluster/state
+  curl {{ if .Values.auth.enabled }}-u {{ .Values.auth.user }}:<password> {{ end }}http://127.0.0.1:{{ .Values.ports.rest }}/management/v1/cluster/state
 
+{{ if and .Values.auth.enabled (not .Values.auth.existingSecret) -}}
+WARNING: using the default lab password from values.yaml. Set auth.password or
+auth.existingSecret before this is reachable by anyone else.
+{{- end }}
+{{ if not .Values.auth.enabled -}}
+WARNING: auth.enabled is false. The REST and client ports accept anonymous
+access from anything that can reach them.
+{{- end }}
 {{ if not .Values.persistence.enabled -}}
 WARNING: persistence is disabled. All data is lost when a pod restarts.
 {{- end }}

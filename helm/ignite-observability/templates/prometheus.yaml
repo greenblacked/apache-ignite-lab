@@ -59,12 +59,22 @@ spec:
             - name: config
               mountPath: /etc/prometheus
               readOnly: true
+            {{- if .Values.prometheus.alertRules.enabled }}
+            - name: rules
+              mountPath: /etc/prometheus/rules
+              readOnly: true
+            {{- end }}
             - name: data
               mountPath: /prometheus
       volumes:
         - name: config
           configMap:
             name: {{ $name }}
+        {{- if .Values.prometheus.alertRules.enabled }}
+        - name: rules
+          configMap:
+            name: {{ $name }}-rules
+        {{- end }}
         - name: data
         {{- if .Values.prometheus.persistence.enabled }}
           persistentVolumeClaim:

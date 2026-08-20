@@ -6,6 +6,10 @@ jvm:
   minMem: 4g
   maxMem: 4g
 
+auth:
+  # Create this Secret out of band; it must hold a "password" key.
+  existingSecret: ignite3-credentials
+
 persistence:
   enabled: true
   size: 100Gi

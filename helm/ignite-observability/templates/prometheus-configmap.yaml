@@ -14,10 +14,32 @@ data:
       scrape_timeout: 10s
       evaluation_interval: {{ .Values.prometheus.scrapeIntervalSeconds }}s
 
+    {{- if .Values.prometheus.alertRules.enabled }}
+    # Mounted from the -rules ConfigMap below. No Alertmanager is configured,
+    # so firing alerts surface on Prometheus' own /alerts page.
+    rule_files:
+      - /etc/prometheus/rules/*.yml
+    {{- end }}
+
     scrape_configs:
       - job_name: ignite-exporter
         metrics_path: /metrics
         static_configs:
           - targets:
               - {{ include "obs.exporterName" . }}:{{ .Values.exporter.port }}
+{{- if .Values.prometheus.alertRules.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-rules
+  labels:
+    {{- include "obs.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+data:
+  # Copied from ops/prometheus/rules/; CI fails if the two drift. Loaded with
+  # .Files.Glob so Go template syntax in the alert annotations reaches
+  # Prometheus untouched.
+  {{- (.Files.Glob "rules/*.yml").AsConfig | nindent 2 }}
+{{- end }}
 {{- end }}
