@@ -183,6 +183,10 @@ Like the Compose lab, the Ignite 3 chart enables authentication for the built-in
 
 Optional TLS helper stub: `scripts/gen-certs.sh` (self-signed only; wire into clients when you are ready).
 
+## License
+
+[Apache-2.0](LICENSE), matching Apache Ignite itself.
+
 ## Troubleshooting
 
 - **Apple Silicon:** use `apacheignite/ignite:2.18.0-arm64` (set in `.env`)

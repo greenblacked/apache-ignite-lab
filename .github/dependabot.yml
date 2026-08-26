@@ -1,0 +1,68 @@
+# Keeps the pinned versions from drifting. Prometheus was a major version
+# behind and Grafana two before this was added; both were found by hand.
+#
+# "docker" and "docker-compose" are separate ecosystems. "docker" reads
+# Dockerfiles only, so the Compose files need their own entry or the image
+# pins this repository actually cares about would never be updated.
+version: 2
+
+updates:
+  # The exporter image is the only Dockerfile in the repository.
+  - package-ecosystem: docker
+    directory: /ops/exporter
+    schedule:
+      interval: weekly
+    commit-message:
+      # No conventional-commit prefix: nothing in this history uses one.
+      prefix: Bump
+
+  # Every Compose file that pins an image. monitoring/docker-compose.yml is
+  # deliberately absent: it only aggregates the two below with "include:" and
+  # names no image of its own.
+  - package-ecosystem: docker-compose
+    directories:
+      - /ignite2
+      - /ignite3
+      - /ops
+      - /monitoring/prometheus
+      - /monitoring/grafana
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: Bump
+    groups:
+      # Both are bumped together by hand anyway, and one pull request needs one
+      # smoke-test run instead of two.
+      observability:
+        patterns:
+          - prom/prometheus
+          - grafana/grafana
+
+  # Action versions in .github/workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: Bump
+
+  # Client libraries used by the Java examples.
+  - package-ecosystem: maven
+    directories:
+      - /examples/ignite2/java
+      - /examples/ignite3/java
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: Bump
+
+  # Client libraries used by the Python examples.
+  - package-ecosystem: pip
+    directories:
+      - /examples/ignite2/python
+      - /examples/ignite3/python
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: Bump
