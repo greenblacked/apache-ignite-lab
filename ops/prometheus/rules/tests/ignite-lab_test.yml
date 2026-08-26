@@ -1,0 +1,205 @@
+# Behaviour tests for ../ignite-lab.yml, run by "promtool test rules".
+#
+# "promtool check rules" only proves the file parses and the PromQL compiles.
+# It cannot catch an inverted comparison, a wrong metric name, or a "for"
+# window that does not match the documented intent. These tests feed synthetic
+# series through the real rules and assert on what actually fires.
+#
+# Each alert is checked twice: once inside its "for" window, where it must stay
+# silent, and once past it, where it must fire with exact labels and
+# annotations. The negative case is the one that catches an accidentally
+# shortened window.
+rule_files:
+  - ../ignite-lab.yml
+
+evaluation_interval: 15s
+
+tests:
+  # A cluster that is down: not ready, one node unreachable, topology short a
+  # node. Drives the three alerts an operator would expect to see during the
+  # "kill a node" practice exercise.
+  - interval: 15s
+    name: cluster down and a node missing
+    input_series:
+      - series: 'ignite_cluster_ready{stack="ignite3"}'
+        values: '0+0x40'
+      - series: 'ignite_cluster_topology_up{stack="ignite3"}'
+        values: '0+0x40'
+      - series: 'ignite_node_up{stack="ignite3", node="ignite3-node2"}'
+        values: '0+0x40'
+      - series: 'ignite_cluster_nodes{stack="ignite3"}'
+        values: '2+0x40'
+      - series: 'ignite_cluster_expected_nodes{stack="ignite3"}'
+        values: '3+0x40'
+    alert_rule_test:
+      # Nothing may fire before the 2m "for" window elapses.
+      - eval_time: 1m
+        alertname: IgniteClusterNotReady
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: IgniteNodeDown
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: IgniteClusterNodeMissing
+        exp_alerts: []
+
+      - eval_time: 3m
+        alertname: IgniteClusterNotReady
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              stack: ignite3
+            exp_annotations:
+              summary: "Ignite ignite3 cluster is not ready"
+              description: "The ignite3 cluster has not reported a healthy topology and identity for 2 minutes. For ignite3 this is usually an uninitialized cluster: run ./scripts/ignite3-init.sh. For ignite2 it is usually an inactive cluster."
+
+      - eval_time: 3m
+        alertname: IgniteNodeDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              stack: ignite3
+              node: ignite3-node2
+            exp_annotations:
+              summary: "Ignite node ignite3-node2 (ignite3) is unreachable"
+              description: "The management API of ignite3-node2 has not responded for 2 minutes. Expected while practising node failure; otherwise check the container."
+
+      - eval_time: 3m
+        alertname: IgniteClusterNodeMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              stack: ignite3
+            exp_annotations:
+              summary: "Ignite ignite3 is missing nodes from its topology"
+              description: "The ignite3 topology reports fewer nodes than the exporter is configured to collect (see ignite_cluster_nodes and ignite_cluster_expected_nodes). A node left the cluster or never joined it."
+
+      - eval_time: 3m
+        alertname: IgniteClusterTopologyUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              stack: ignite3
+            exp_annotations:
+              summary: "Ignite ignite3 topology API is not answering"
+              description: "The exporter could not read the ignite3 topology. The cluster may be down, uninitialized, or rejecting the lab credentials."
+
+  # A healthy cluster must produce silence. This is what the smoke test's
+  # "No Ignite alerts firing" check asserts against the live lab.
+  - interval: 15s
+    name: healthy cluster fires nothing
+    input_series:
+      - series: 'ignite_cluster_ready{stack="ignite2"}'
+        values: '1+0x40'
+      - series: 'ignite_cluster_topology_up{stack="ignite2"}'
+        values: '1+0x40'
+      - series: 'ignite_node_up{stack="ignite2", node="ignite2-node1"}'
+        values: '1+0x40'
+      - series: 'ignite_node_healthy{stack="ignite2", node="ignite2-node1"}'
+        values: '1+0x40'
+      - series: 'ignite_cluster_nodes{stack="ignite2"}'
+        values: '3+0x40'
+      - series: 'ignite_cluster_expected_nodes{stack="ignite2"}'
+        values: '3+0x40'
+      - series: 'ignite_exporter_collection_error'
+        values: '0+0x40'
+      - series: 'ignite_exporter_scrape_duration_seconds{stack="ignite2"}'
+        values: '0.2+0x40'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: IgniteClusterNotReady
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: IgniteNodeDown
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: IgniteNodeUnhealthy
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: IgniteClusterNodeMissing
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: IgniteExporterCollectionFailing
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: IgniteExporterScrapeSlow
+        exp_alerts: []
+
+  # A node that answers its API but reports an unhealthy state is a different
+  # failure from an unreachable one, and has its own alert with a longer
+  # window. Asserting both here keeps the two from being collapsed into one.
+  - interval: 15s
+    name: node reachable but unhealthy
+    input_series:
+      - series: 'ignite_node_up{stack="ignite2", node="ignite2-node3"}'
+        values: '1+0x60'
+      - series: 'ignite_node_healthy{stack="ignite2", node="ignite2-node3"}'
+        values: '0+0x60'
+    alert_rule_test:
+      # IgniteNodeDown must NOT fire: the node is reachable.
+      - eval_time: 10m
+        alertname: IgniteNodeDown
+        exp_alerts: []
+      # for: 5m, so still silent at 3m.
+      - eval_time: 3m
+        alertname: IgniteNodeUnhealthy
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: IgniteNodeUnhealthy
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              stack: ignite2
+              node: ignite2-node3
+            exp_annotations:
+              summary: "Ignite node ignite2-node3 (ignite2) is not healthy"
+              description: "ignite2-node3 answers its management API but does not report a healthy running state. Check ignite_node_info for the state it reports."
+
+  # The exporter's own failure modes. ignite_exporter_collection_error is only
+  # emitted when collection raises, and it is the sole signal for that case,
+  # so its alert is the one most worth pinning down.
+  - interval: 15s
+    name: exporter failing and scraping slowly
+    input_series:
+      - series: 'ignite_exporter_collection_error'
+        values: '1+0x40'
+      - series: 'ignite_exporter_scrape_duration_seconds{stack="ignite3"}'
+        values: '7+0x60'
+      - series: 'up{job="ignite-exporter"}'
+        values: '0+0x40'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: IgniteExporterCollectionFailing
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: IgniteExporterCollectionFailing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "The Ignite lab exporter failed to collect any metrics"
+              description: "Metric collection raised an unexpected error, so no per-stack series are published. Check the exporter logs."
+
+      - eval_time: 2m
+        alertname: IgniteExporterDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: ignite-exporter
+            exp_annotations:
+              summary: "Prometheus cannot scrape the Ignite lab exporter"
+              description: "The ignite-exporter target has been down for more than a minute. Check \"docker compose -f ops/docker-compose.yml ps\" and the exporter logs; no Ignite health data is being collected."
+
+      # for: 10m, so silent at 5m and firing at 12m.
+      - eval_time: 5m
+        alertname: IgniteExporterScrapeSlow
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: IgniteExporterScrapeSlow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              stack: ignite3
+            exp_annotations:
+              summary: "Collecting ignite3 metrics is slow"
+              description: "One collection of the ignite3 stack took 7.0s. The REST APIs behind it are responding slowly, or nodes are timing out."

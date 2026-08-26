@@ -54,6 +54,10 @@ jobs:
           # filesystem, where the mount does not exist, so check the rules
           # themselves explicitly.
           promtool check rules ops/prometheus/rules/ignite-lab.yml
+          # "check rules" only proves the PromQL compiles. "test rules" feeds
+          # synthetic series through the real rules and asserts on what fires,
+          # which is what catches an inverted comparison or a changed "for".
+          promtool test rules ops/prometheus/rules/tests/ignite-lab_test.yml
 
       # A malformed dashboard reaches Grafana as a silently missing dashboard.
       - name: Validate Grafana dashboard JSON

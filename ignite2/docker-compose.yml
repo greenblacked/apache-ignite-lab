@@ -7,6 +7,9 @@ x-ignite2: &ignite2
   volumes:
     - ./config/ignite-config.xml:/config/ignite-config.xml:ro
   mem_limit: 2g
+  # The image never needs to gain privileges via setuid; deny it outright.
+  security_opt:
+    - no-new-privileges:true
   healthcheck:
     test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
     interval: 10s
