@@ -1,6 +1,6 @@
 services:
   grafana:
-    image: grafana/grafana:12.4.9
+    image: grafana/grafana:13.2.0
     restart: unless-stopped
     networks: [monitoring-lab]
     environment:
