@@ -13,7 +13,7 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <project.build.outputTimestamp>2026-08-10T00:00:00Z</project.build.outputTimestamp>
     <maven.compiler.plugin.version>3.14.1</maven.compiler.plugin.version>
-    <exec.maven.plugin.version>3.5.0</exec.maven.plugin.version>
+    <exec.maven.plugin.version>3.6.3</exec.maven.plugin.version>
   </properties>
   <dependencies>
     <dependency>
