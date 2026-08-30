@@ -31,6 +31,13 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: Bump
+    ignore:
+      # Ignite 2 and Ignite 3 are different products sharing one Docker
+      # repository, so a "major" bump swaps the Ignite 2 stack for an Ignite 3
+      # image whose config, ports and CLI all differ. Which Ignite version
+      # each stack runs is a deliberate choice here, not a dependency to track.
+      - dependency-name: apacheignite/ignite
+        update-types: ["version-update:semver-major"]
     groups:
       # Both are bumped together by hand anyway, and one pull request needs one
       # smoke-test run instead of two.
@@ -56,6 +63,14 @@ updates:
       interval: monthly
     commit-message:
       prefix: Bump
+    ignore:
+      # Same collision as the image above: org.apache.ignite:ignite-core 3.x is
+      # a different product from 2.x, not a newer release of it. Dependabot
+      # raised exactly that bump once and the Ignite 2 example stopped
+      # compiling on "package org.apache.ignite does not exist". Plugin and
+      # minor updates still flow.
+      - dependency-name: "org.apache.ignite:*"
+        update-types: ["version-update:semver-major"]
 
   # Client libraries used by the Python examples.
   - package-ecosystem: pip
