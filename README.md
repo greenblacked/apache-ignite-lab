@@ -138,6 +138,8 @@ See [examples/README.md](examples/README.md).
 5. Start ops; open Prometheus targets and Grafana dashboard **Ignite Lab Overview**
 6. Kill one node container; observe cluster behavior; watch `IgniteNodeDown` and `IgniteClusterNodeMissing` at http://127.0.0.1:9090/alerts; bring it back
 
+`./scripts/failure-drill.sh` automates step 6 end to end: it stops a node, waits for `IgniteNodeDown` to fire, restarts it, and checks the alert clears. Preview it with `--dry-run` first. It restores the node through a trap, so interrupting it never leaves the lab a node short.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on pushes to `master`, on pull requests, and on manual dispatch.
