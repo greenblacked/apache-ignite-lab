@@ -31,6 +31,10 @@ back after opening it, and if a footer is present, update the body to remove
 it. Updating does not re-append. The same applies to issue comments and review
 replies.
 
+A project-level skill at `.claude/skills/no-attribution/` restates this with
+the exact check commands, so the rule is reachable while a commit or pull
+request is being written and not only at session start. Keep the two in step.
+
 ### Git identity
 
 The container's default git identity may be `Claude <noreply@anthropic.com>`.
