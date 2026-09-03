@@ -4,6 +4,10 @@
 # "docker" and "docker-compose" are separate ecosystems. "docker" reads
 # Dockerfiles only, so the Compose files need their own entry or the image
 # pins this repository actually cares about would never be updated.
+#
+# No commit-message.prefix is set anywhere. Dependabot's own subject is already
+# "Bump X from A to B", which matches this history's imperative, unprefixed
+# style; adding prefix: Bump produced "Bump: Bump actions/checkout from 5 to 7".
 version: 2
 
 updates:
@@ -12,9 +16,6 @@ updates:
     directory: /ops/exporter
     schedule:
       interval: weekly
-    commit-message:
-      # No conventional-commit prefix: nothing in this history uses one.
-      prefix: Bump
 
   # Every Compose file that pins an image. monitoring/docker-compose.yml is
   # deliberately absent: it only aggregates the two below with "include:" and
@@ -29,8 +30,6 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
-    commit-message:
-      prefix: Bump
     ignore:
       # Ignite 2 and Ignite 3 are different products sharing one Docker
       # repository, so a "major" bump swaps the Ignite 2 stack for an Ignite 3
@@ -51,8 +50,6 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    commit-message:
-      prefix: Bump
 
   # Client libraries used by the Java examples.
   - package-ecosystem: maven
@@ -61,8 +58,6 @@ updates:
       - /examples/ignite3/java
     schedule:
       interval: monthly
-    commit-message:
-      prefix: Bump
     ignore:
       # Same collision as the image above: org.apache.ignite:ignite-core 3.x is
       # a different product from 2.x, not a newer release of it. Dependabot
@@ -79,5 +74,3 @@ updates:
       - /examples/ignite3/python
     schedule:
       interval: monthly
-    commit-message:
-      prefix: Bump
