@@ -28,6 +28,13 @@ FIRE_TIMEOUT=300
 RECOVER_TIMEOUT=300
 POLL_INTERVAL=5
 PROMETHEUS_URL="${PROMETHEUS_URL:-http://127.0.0.1:9090}"
+# Trailing slashes would build "//-/ready" and "//api/v1/alerts". Prometheus
+# 301-redirects the cleaned path and "curl -f" treats a 301 as success, so
+# preflight would pass while every poll parsed a redirect body instead of
+# JSON -- the drill would stop a healthy node and then blame the alert rule.
+while [[ "$PROMETHEUS_URL" == */ ]]; do
+  PROMETHEUS_URL="${PROMETHEUS_URL%/}"
+done
 
 # Set once the node is stopped, so the trap knows whether to restore it.
 NODE_STOPPED=0
@@ -145,6 +152,12 @@ fi
 if [[ ! "$FIRE_TIMEOUT" =~ ^[0-9]+$ ]] || [[ "$FIRE_TIMEOUT" -lt 60 ]] || [[ "$FIRE_TIMEOUT" -gt 3600 ]]; then
   echo "Invalid --timeout '$FIRE_TIMEOUT'. Expected an integer from 60 to 3600." >&2
   echo "IgniteNodeDown has a 2m 'for' window, so anything under 60s cannot pass." >&2
+  exit "$EXIT_USAGE"
+fi
+
+if [[ ! "$PROMETHEUS_URL" =~ ^https?://[^/[:space:]]+$ ]]; then
+  echo "Invalid PROMETHEUS_URL '$PROMETHEUS_URL'." >&2
+  echo "Expected a scheme and host with no path, e.g. http://127.0.0.1:9090" >&2
   exit "$EXIT_USAGE"
 fi
 
@@ -309,9 +322,13 @@ wait_for_query() {
 
 trap cleanup EXIT INT TERM
 
+# Set before the stop, not after. "docker compose stop" can take the full
+# SIGTERM grace period, and a Ctrl-C inside that window -- or a stop that halts
+# the container and still exits non-zero -- would otherwise leave the trap
+# blind and the node down. Restoring a node that never stopped is a no-op.
+NODE_STOPPED=1
 log info "Stopping $NODE."
 lab_compose "$COMPOSE_FILE" stop "$NODE" >/dev/null
-NODE_STOPPED=1
 
 log info "Waiting for IgniteNodeDown to fire. Its 'for' window is 2m, so this takes a while."
 if ! wait_for_alert "IgniteNodeDown is firing for $NODE" "$FIRE_TIMEOUT" "$FIRING_PROGRAM"; then
