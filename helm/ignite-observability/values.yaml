@@ -62,7 +62,7 @@ grafana:
   enabled: true
   image:
     repository: grafana/grafana
-    tag: 12.4.9
+    tag: 13.2.1
     pullPolicy: IfNotPresent
   port: 3000
   adminUser: admin
