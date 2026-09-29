@@ -37,7 +37,7 @@ services:
       start_period: 5s
 
   prometheus:
-    image: prom/prometheus:v3.14.0
+    image: prom/prometheus:v3.15.0
     restart: unless-stopped
     networks: [ignite-lab]
     labels:
@@ -67,7 +67,7 @@ services:
       start_period: 10s
 
   grafana:
-    image: grafana/grafana:13.2.1
+    image: grafana/grafana:13.2.2
     restart: unless-stopped
     networks: [ignite-lab]
     labels:
